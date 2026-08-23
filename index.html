@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#081421" />
+  <title>OM PRO OPS HUB</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand"><div class="brand-mark">OP</div><div><strong>OM PRO</strong><span>OPS HUB</span></div></div>
+      <nav id="desktopNav" class="nav-list"></nav>
+      <div class="sidebar-foot"><div class="status-dot"></div><div><strong>Mode local sécurisé</strong><span>Supabase à connecter</span></div></div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div><p class="eyebrow" id="pageEyebrow">DIMANCHE 23 AOÛT</p><h1 id="pageTitle">Aujourd’hui</h1></div>
+        <div class="top-actions"><button class="icon-btn" id="quickMemoBtn" title="Mémo rapide">✦</button><button class="primary-btn" id="quickTaskBtn">+ Nouvelle action</button><div class="avatar">AL</div></div>
+      </header>
+      <section id="pageContent" class="page-content"></section>
+    </main>
+  </div>
+  <nav id="mobileNav" class="mobile-nav"></nav>
+  <dialog id="taskDialog" class="modal">
+    <form method="dialog" id="taskForm">
+      <div class="modal-head"><div><p class="eyebrow">ACTION</p><h2>Nouvelle action</h2></div><button class="icon-btn" value="cancel">×</button></div>
+      <label>Titre<input id="taskTitle" required placeholder="Ex. Valider le menu Monaco" /></label>
+      <div class="form-grid">
+        <label>Assigné à<select id="taskAssignee"></select></label>
+        <label>Priorité<select id="taskPriority"><option>Haute</option><option selected>Normale</option><option>Basse</option></select></label>
+        <label>Échéance<input id="taskDue" type="datetime-local" /></label>
+        <label>Contexte<select id="taskContext"><option>Bâtiment PRO</option><option>Monaco – OM</option><option>Stade Vélodrome</option><option>Déplacement</option><option>Nutrition</option><option>Personnel</option></select></label>
+      </div>
+      <label>Note<textarea id="taskNote" rows="3" placeholder="Informations utiles, consigne, dépendance…"></textarea></label>
+      <label class="switch-row"><input id="taskPrivate" type="checkbox" /><span>Privée — visible uniquement par moi</span></label>
+      <div class="modal-actions"><button value="cancel" class="ghost-btn">Annuler</button><button id="saveTaskBtn" value="default" class="primary-btn">Enregistrer</button></div>
+    </form>
+  </dialog>
+  <dialog id="memoDialog" class="modal small">
+    <form method="dialog" id="memoForm">
+      <div class="modal-head"><div><p class="eyebrow">CAPTURE RAPIDE</p><h2>Nouveau mémo</h2></div><button class="icon-btn" value="cancel">×</button></div>
+      <textarea id="memoText" rows="5" required placeholder="Écris comme tu le dirais : demander à Damien de préparer les sacs Monaco vendredi avant 14h…"></textarea>
+      <div class="ai-hint">✦ Le moteur d’automatisation pourra ensuite proposer date, responsable et contexte.</div>
+      <div class="modal-actions"><button value="cancel" class="ghost-btn">Annuler</button><button value="default" class="primary-btn">Ajouter le mémo</button></div>
+    </form>
+  </dialog>
+  <div id="toast" class="toast"></div>
+  <script src="app.js"></script>
+</body>
+</html>
