@@ -19,6 +19,7 @@ Fonctions :
 - rubrique de demandes et devis reçus par mail pour les traiteurs, pizzas et sushi ;
 - Travel Inbox réservée au manager ;
 - interface responsive iPhone et Android.
+- identité visuelle API Travel et icônes d’accueil iPhone/Android via le manifeste web.
 
 ## Déploiement
 

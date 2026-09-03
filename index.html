@@ -5,7 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#071b2f">
   <meta name="description" content="Espace déplacements API Restauration - équipe professionnelle OM">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="API Travel">
   <title>OM PRO · Travel</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/travel-app-icon-192.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -15,7 +23,7 @@
   <section id="loginScreen" class="login-screen">
     <div class="login-glow"></div>
     <div class="login-card">
-      <div class="brand-lockup"><span class="brand-mark">OM</span><div><strong>TRAVEL</strong><small>API RESTAURATION · ÉQUIPE PRO</small></div></div>
+      <div class="brand-lockup"><img class="brand-mark" src="assets/travel-app-icon-192.png" alt="Logo API Travel"><div><strong>TRAVEL</strong><small>API RESTAURATION · ÉQUIPE PRO</small></div></div>
       <div id="profileStep">
         <p class="eyebrow">ACCÈS ÉQUIPE</p>
         <h1>Qui êtes-vous&nbsp;?</h1>
@@ -37,7 +45,7 @@
 
   <div id="appShell" class="app-shell hidden">
     <aside class="sidebar">
-      <div class="side-brand"><span class="brand-mark">OM</span><div><strong>TRAVEL</strong><small>API RESTAURATION</small></div></div>
+      <div class="side-brand"><img class="brand-mark" src="assets/travel-app-icon-192.png" alt="Logo API Travel"><div><strong>TRAVEL</strong><small>API RESTAURATION</small></div></div>
       <nav class="nav-list">
         <button class="nav-item active" data-page="home"><span>⌂</span>Accueil</button>
         <button class="nav-item" data-page="trips"><span>✈</span>Déplacements</button>
@@ -50,7 +58,7 @@
 
     <main class="main">
       <header class="topbar">
-        <div><p id="pageEyebrow" class="eyebrow">ESPACE PERSONNEL</p><h1 id="pageTitle">Accueil</h1></div>
+        <div class="topbar-title"><img class="topbar-logo" src="assets/travel-app-icon-192.png" alt=""><div><p id="pageEyebrow" class="eyebrow">ESPACE PERSONNEL</p><h1 id="pageTitle">Accueil</h1></div></div>
         <div class="user-box"><div id="topAvatar" class="avatar">AL</div><div><strong id="topName">Amar</strong><small id="topRole"></small></div><button id="logoutBtn" title="Déconnexion">↪</button></div>
       </header>
       <section id="pageContent" class="page-content"><div class="loading-card">Chargement de vos déplacements…</div></section>
