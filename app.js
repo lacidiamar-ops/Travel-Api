@@ -3,10 +3,10 @@
 const SUPABASE_URL='https://vjulagaprzbnquynwjmt.supabase.co'
 const SUPABASE_KEY='sb_publishable_iT2AHtS29Qi63weZslm56g_oHkqbcvK'
 const TEAM=[
-  {id:'a1000000-0000-0000-0000-000000000001',name:'Amar Lacidi',first:'Amar',role:'Directeur de la restauration',initials:'AL',color:'#0b83c9',manager:true},
-  {id:'a1000000-0000-0000-0000-000000000002',name:'Igal Settbon',first:'Igal',role:'Chef de cuisine',initials:'IS',color:'#d5a940'},
-  {id:'a1000000-0000-0000-0000-000000000003',name:'Bastien Florido',first:'Bastien',role:"Maître d'hôtel",initials:'BF',color:'#4058a8'},
-  {id:'a1000000-0000-0000-0000-000000000004',name:'Damien Cau',first:'Damien',role:'Second de cuisine',initials:'DC',color:'#23846f'}
+  {id:'d3cfc0c3-cde3-49c9-ab83-1e6f7175ae49',email:'profile-01@travel.local',name:'Amar Lacidi',first:'Amar',role:'Directeur de la restauration',initials:'AL',color:'#0b83c9',manager:true},
+  {id:'ac71ad88-9757-4f93-808a-9f91dec68f5d',email:'profile-02@travel.local',name:'Igal Settbon',first:'Igal',role:'Chef de cuisine',initials:'IS',color:'#d5a940'},
+  {id:'30f5e6a8-91e6-4fdb-9626-703dc41d0faa',email:'profile-03@travel.local',name:'Bastien Florido',first:'Bastien',role:"Maître d'hôtel",initials:'BF',color:'#4058a8'},
+  {id:'88783ee8-d980-4f39-9608-c6b3251b8aef',email:'profile-04@travel.local',name:'Damien Cau',first:'Damien',role:'Second de cuisine',initials:'DC',color:'#23846f'}
 ]
 const ROSTER_COUNTS={'Amar Lacidi':5,'Igal Settbon':7,'Bastien Florido':5,'Damien Cau':5}
 const FALLBACK_APPS=[
@@ -57,7 +57,7 @@ function pinKey(key){
 async function login(){
   $('pinError').textContent='Vérification…'
   try{
-    const {data,error}=await state.sb.auth.signInWithPassword({email:`${state.selected.id}@cph.local`,password:state.pin})
+    const {data,error}=await state.sb.auth.signInWithPassword({email:state.selected.email,password:state.pin})
     if(error||!data?.user)throw new Error('PIN incorrect')
     state.current=state.selected;await enterApp()
   }catch(error){state.pin='';updatePinDots();$('pinError').textContent=error.message==='PIN incorrect'?'PIN incorrect. Réessayez.':'Connexion indisponible. Réessayez.'}

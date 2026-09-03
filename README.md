@@ -9,7 +9,8 @@ L'application reste isolée des autres applications OM. Elle agrège en lecture 
 ## Version actuelle
 
 Fonctions :
-- connexion simple par profil et PIN habituel ;
+- connexion simple par profil et PIN Travel personnel ;
+- comptes Travel dédiés, séparés des comptes des autres applications ;
 - quatre espaces : Amar Lacidi, Igal Settbon, Bastien Florido et Damien Cau ;
 - planning des binômes et fiche détaillée par déplacement ;
 - feuilles de route, billets, hôtel et documents reçus par mail ;
