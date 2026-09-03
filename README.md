@@ -15,7 +15,8 @@ Fonctions :
 - planning des binômes et fiche détaillée par déplacement ;
 - feuilles de route, billets, hôtel et documents reçus par mail ;
 - météo à l'approche du déplacement ;
-- accès directs à Audit Hôtel, Cahier des charges et Devis traiteurs ;
+- accès directs à Audit Hôtel et Cahier des charges ;
+- rubrique de demandes et devis reçus par mail pour les traiteurs, pizzas et sushi ;
 - Travel Inbox réservée au manager ;
 - interface responsive iPhone et Android.
 

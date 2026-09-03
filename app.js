@@ -11,8 +11,7 @@ const TEAM=[
 const ROSTER_COUNTS={'Amar Lacidi':5,'Igal Settbon':7,'Bastien Florido':5,'Damien Cau':5}
 const FALLBACK_APPS=[
   {app_type:'hotel_audit',label:'Audit Hôtel',description:"Contrôle de l'hôtel et suivi des corrections",icon:'⌂'},
-  {app_type:'cahier_des_charges',label:'Cahier des charges',description:'Consignes hôtel, déplacement et chiffrage',icon:'▤'},
-  {app_type:'other',label:'Devis traiteurs',description:'Créer et consulter les devis opérationnels',icon:'€'}
+  {app_type:'cahier_des_charges',label:'Cahier des charges',description:'Consignes hôtel, déplacement et chiffrage',icon:'▤'}
 ]
 const CONTACTS=[
   {name:'Léo Tagawa',role:'Travel Manager OM'},
@@ -132,13 +131,19 @@ function tripListHtml(filter){
 }
 function renderTripList(filter){$('tripList').innerHTML=tripListHtml(filter);bindPage()}
 function documentsPage(){
-  const docs=state.documents
-  return `<div class="page-tools"><p>${docs.length} document${docs.length!==1?'s':''} accessible${docs.length!==1?'s':''} avec votre profil.</p></div><div class="document-list">${docs.length?docs.map(doc=>documentCard(doc)).join(''):'<div class="empty-card">Les feuilles de route, billets et confirmations d’hôtel apparaîtront ici dès leur réception.</div>'}</div>`
+  const docs=state.documents,quotes=docs.filter(doc=>doc.document_type==='caterer_quote'),travelDocs=docs.filter(doc=>doc.document_type!=='caterer_quote')
+  return `<div class="page-tools"><p>${docs.length} document${docs.length!==1?'s':''} accessible${docs.length!==1?'s':''} avec votre profil.</p></div>
+  <div class="section-title"><div><p class="eyebrow">REÇUS PAR MAIL</p><h3>Devis traiteurs, pizzas & sushi</h3></div></div>
+  <div class="document-list">${quotes.length?quotes.map(documentCard).join(''):'<div class="empty-card">Les demandes et devis des traiteurs, pizzerias et restaurants sushi apparaîtront ici dès leur réception.</div>'}</div>
+  <div class="section-title"><div><p class="eyebrow">DOSSIER DE VOYAGE</p><h3>Autres documents</h3></div></div>
+  <div class="document-list">${travelDocs.length?travelDocs.map(documentCard).join(''):'<div class="empty-card">Les feuilles de route, billets et confirmations d’hôtel apparaîtront ici dès leur réception.</div>'}</div>`
 }
 function documentCard(doc){
   const mission=missionOf(doc.mission_id),url=safeUrl(doc.source_url||'#')
-  const labels={roadmap:'Feuille de route',flight_ticket:"Billet d'avion",train_ticket:'Billet de train',hotel_confirmation:'Hôtel',rooming:'Rooming',menu:'Menu',cdc:'Cahier des charges',audit:'Audit hôtel',invoice:'Facture',other:'Document'}
-  return `<a class="document-card" href="${url}" ${url!=='#'?'target="_blank" rel="noopener"':''}><span>${doc.document_type==='flight_ticket'?'✈':doc.document_type==='hotel_confirmation'?'⌂':'▤'}</span><div><em>${esc(labels[doc.document_type]||'Document')}</em><strong>${esc(doc.file_name||labels[doc.document_type]||'Document')}</strong><small>${esc(mission?.destination_city||'Saison 2026-2027')} · ${fmtDate(doc.document_date||doc.created_at)}</small></div><b>${url==='#'?'À venir':'↗'}</b></a>`
+  const quoteLabel=doc.metadata?.document_status==='request'?'Demande de devis':`Devis ${doc.metadata?.supplier_type||'traiteur'}`
+  const labels={roadmap:'Feuille de route',flight_ticket:"Billet d'avion",train_ticket:'Billet de train',hotel_confirmation:'Hôtel',rooming:'Rooming',menu:'Menu',cdc:'Cahier des charges',audit:'Audit hôtel',invoice:'Facture',caterer_quote:quoteLabel,other:'Document'}
+  const icon=doc.document_type==='flight_ticket'?'✈':doc.document_type==='hotel_confirmation'?'⌂':doc.document_type==='caterer_quote'?'€':'▤'
+  return `<a class="document-card" href="${url}" ${url!=='#'?'target="_blank" rel="noopener"':''}><span>${icon}</span><div><em>${esc(labels[doc.document_type]||'Document')}</em><strong>${esc(doc.file_name||labels[doc.document_type]||'Document')}</strong><small>${esc(mission?.destination_city||'Saison 2026-2027')} · ${fmtDate(doc.document_date||doc.created_at)}</small></div><b>${url==='#'?'À venir':'↗'}</b></a>`
 }
 function appsPage(){return `<div class="page-intro"><h2>Tout le nécessaire sur le terrain</h2><p>Chaque outil s’ouvre dans son application dédiée, avec ses propres droits d’accès.</p></div>${appCards()}<div class="contact-panel"><div class="section-title"><div><p class="eyebrow">SOURCES VOYAGE</p><h3>Informations synchronisées</h3></div></div>${CONTACTS.map(c=>`<div class="contact-row"><span>${initials(c.name)}</span><div><strong>${c.name}</strong><small>${c.role}</small></div><b>Synchronisé</b></div>`).join('')}</div>`}
 function inboxPage(){
