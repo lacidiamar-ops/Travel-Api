@@ -1,23 +1,23 @@
-# OM PRO OPS HUB
+# OM PRO Travel
 
-Cockpit opérationnel pour la restauration de l'équipe professionnelle : calendrier, actions, routines, Match Center, inbox et reporting 360°.
+Espace mobile sécurisé pour les déplacements de l'équipe restauration OM PRO.
 
 ## Principe d'architecture
 
-Cette application reste isolée des applications OM existantes. Les futures connexions vers Travel Team Pro, Effectif Repas, Audit Hôtel, Repas Après-Match, e-mail professionnel et imports WhatsApp doivent fonctionner en lecture ou via événements contrôlés. Aucune source validée ne doit être écrasée silencieusement.
+L'application reste isolée des autres applications OM. Elle agrège en lecture les tables `travel_*` et ouvre les applications dédiées sans modifier leurs données. Chaque utilisateur ne voit que ses missions grâce aux politiques RLS Supabase. Aucune source validée n'est écrasée silencieusement.
 
 ## Version actuelle
 
-Prototype fonctionnel front-end autonome :
-- dashboard quotidien ;
-- calendrier opérationnel ;
-- actions partagées ou privées ;
-- Match Center avec préparation ;
-- inbox de signaux externes ;
-- reporting 360° ;
-- routines relatives au match ;
-- persistance locale des actions et mémos.
+Fonctions :
+- connexion simple par profil et PIN habituel ;
+- quatre espaces : Amar Lacidi, Igal Settbon, Bastien Florido et Damien Cau ;
+- planning des binômes et fiche détaillée par déplacement ;
+- feuilles de route, billets, hôtel et documents reçus par mail ;
+- météo à l'approche du déplacement ;
+- accès directs à Audit Hôtel, Cahier des charges et Devis traiteurs ;
+- Travel Inbox réservée au manager ;
+- interface responsive iPhone et Android.
 
 ## Déploiement
 
-Application statique compatible Vercel, sans secret dans le dépôt.
+Application statique compatible Vercel. La clé Supabase publiée côté client est une clé publique ; les données restent protégées par authentification et RLS.

@@ -1,55 +1,73 @@
 <!doctype html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="theme-color" content="#081421" />
-  <title>OM PRO OPS HUB</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#071b2f">
+  <meta name="description" content="Espace déplacements API Restauration - équipe professionnelle OM">
+  <title>OM PRO · Travel</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="app-shell">
+  <section id="loginScreen" class="login-screen">
+    <div class="login-glow"></div>
+    <div class="login-card">
+      <div class="brand-lockup"><span class="brand-mark">OM</span><div><strong>TRAVEL</strong><small>API RESTAURATION · ÉQUIPE PRO</small></div></div>
+      <div id="profileStep">
+        <p class="eyebrow">ACCÈS ÉQUIPE</p>
+        <h1>Qui êtes-vous&nbsp;?</h1>
+        <p class="lead">Sélectionnez votre profil pour retrouver uniquement les déplacements qui vous concernent.</p>
+        <div id="profileGrid" class="profile-grid"></div>
+      </div>
+      <div id="pinStep" class="hidden">
+        <button id="backProfiles" class="back-btn" type="button">← Changer de profil</button>
+        <div id="pinAvatar" class="pin-avatar"></div>
+        <h2 id="pinGreeting"></h2>
+        <p class="lead">Saisissez votre code PIN habituel à 4 chiffres.</p>
+        <div id="pinDots" class="pin-dots" aria-label="Code PIN"><i></i><i></i><i></i><i></i></div>
+        <div id="pinError" class="pin-error" role="alert"></div>
+        <div id="keypad" class="keypad"></div>
+      </div>
+      <div class="secure-note"><span>●</span> Accès personnel sécurisé · données filtrées par utilisateur</div>
+    </div>
+  </section>
+
+  <div id="appShell" class="app-shell hidden">
     <aside class="sidebar">
-      <div class="brand"><div class="brand-mark">OP</div><div><strong>OM PRO</strong><span>OPS HUB</span></div></div>
-      <nav id="desktopNav" class="nav-list"></nav>
-      <div class="sidebar-foot"><div class="status-dot"></div><div><strong>Mode local sécurisé</strong><span>Supabase à connecter</span></div></div>
+      <div class="side-brand"><span class="brand-mark">OM</span><div><strong>TRAVEL</strong><small>API RESTAURATION</small></div></div>
+      <nav class="nav-list">
+        <button class="nav-item active" data-page="home"><span>⌂</span>Accueil</button>
+        <button class="nav-item" data-page="trips"><span>✈</span>Déplacements</button>
+        <button class="nav-item" data-page="documents"><span>▤</span>Documents</button>
+        <button class="nav-item" data-page="apps"><span>⌘</span>Applications</button>
+        <button class="nav-item manager-only" data-page="inbox"><span>↧</span>Travel Inbox</button>
+      </nav>
+      <div class="sync-card"><i></i><div><strong>Synchronisation active</strong><small>Mails Travel & feuille de route</small></div></div>
     </aside>
+
     <main class="main">
       <header class="topbar">
-        <div><p class="eyebrow" id="pageEyebrow">DIMANCHE 23 AOÛT</p><h1 id="pageTitle">Aujourd’hui</h1></div>
-        <div class="top-actions"><button class="icon-btn" id="quickMemoBtn" title="Mémo rapide">✦</button><button class="primary-btn" id="quickTaskBtn">+ Nouvelle action</button><div class="avatar">AL</div></div>
+        <div><p id="pageEyebrow" class="eyebrow">ESPACE PERSONNEL</p><h1 id="pageTitle">Accueil</h1></div>
+        <div class="user-box"><div id="topAvatar" class="avatar">AL</div><div><strong id="topName">Amar</strong><small id="topRole"></small></div><button id="logoutBtn" title="Déconnexion">↪</button></div>
       </header>
-      <section id="pageContent" class="page-content"></section>
+      <section id="pageContent" class="page-content"><div class="loading-card">Chargement de vos déplacements…</div></section>
     </main>
+
+    <nav class="mobile-nav">
+      <button class="nav-item active" data-page="home"><span>⌂</span>Accueil</button>
+      <button class="nav-item" data-page="trips"><span>✈</span>Départs</button>
+      <button class="nav-item" data-page="documents"><span>▤</span>Documents</button>
+      <button class="nav-item" data-page="apps"><span>⌘</span>Apps</button>
+      <button class="nav-item manager-only" data-page="inbox"><span>↧</span>Inbox</button>
+    </nav>
   </div>
-  <nav id="mobileNav" class="mobile-nav"></nav>
-  <dialog id="taskDialog" class="modal">
-    <form method="dialog" id="taskForm">
-      <div class="modal-head"><div><p class="eyebrow">ACTION</p><h2>Nouvelle action</h2></div><button class="icon-btn" value="cancel">×</button></div>
-      <label>Titre<input id="taskTitle" required placeholder="Ex. Valider le menu Monaco" /></label>
-      <div class="form-grid">
-        <label>Assigné à<select id="taskAssignee"></select></label>
-        <label>Priorité<select id="taskPriority"><option>Haute</option><option selected>Normale</option><option>Basse</option></select></label>
-        <label>Échéance<input id="taskDue" type="datetime-local" /></label>
-        <label>Contexte<select id="taskContext"><option>Bâtiment PRO</option><option>Monaco – OM</option><option>Stade Vélodrome</option><option>Déplacement</option><option>Nutrition</option><option>Personnel</option></select></label>
-      </div>
-      <label>Note<textarea id="taskNote" rows="3" placeholder="Informations utiles, consigne, dépendance…"></textarea></label>
-      <label class="switch-row"><input id="taskPrivate" type="checkbox" /><span>Privée — visible uniquement par moi</span></label>
-      <div class="modal-actions"><button value="cancel" class="ghost-btn">Annuler</button><button id="saveTaskBtn" value="default" class="primary-btn">Enregistrer</button></div>
-    </form>
-  </dialog>
-  <dialog id="memoDialog" class="modal small">
-    <form method="dialog" id="memoForm">
-      <div class="modal-head"><div><p class="eyebrow">CAPTURE RAPIDE</p><h2>Nouveau mémo</h2></div><button class="icon-btn" value="cancel">×</button></div>
-      <textarea id="memoText" rows="5" required placeholder="Écris comme tu le dirais : demander à Damien de préparer les sacs Monaco vendredi avant 14h…"></textarea>
-      <div class="ai-hint">✦ Le moteur d’automatisation pourra ensuite proposer date, responsable et contexte.</div>
-      <div class="modal-actions"><button value="cancel" class="ghost-btn">Annuler</button><button value="default" class="primary-btn">Ajouter le mémo</button></div>
-    </form>
-  </dialog>
-  <div id="toast" class="toast"></div>
+
+  <dialog id="tripDialog" class="trip-dialog"><div id="tripDialogContent"></div></dialog>
+  <div id="toast" class="toast" role="status"></div>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
