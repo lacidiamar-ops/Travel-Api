@@ -18,7 +18,7 @@ const CONTACTS=[
   {name:'Stéphane Saliu',role:'Travel / organisation'}
 ]
 
-const state={sb:null,current:null,pin:'',selected:null,page:'home',missions:[],matches:[],assignments:[],legs:[],documents:[],apps:[],inbox:[],changes:[],members:[]}
+const state={sb:null,current:null,pin:'',selected:null,page:'home',missions:[],matches:[],assignments:[],legs:[],documents:[],apps:[],inbox:[],changes:[],members:[],refreshTimer:null}
 const $=id=>document.getElementById(id)
 const esc=value=>String(value??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))
 const safeUrl=value=>{try{const u=new URL(value);return ['http:','https:'].includes(u.protocol)?u.href:'#'}catch{return '#'}}
@@ -30,6 +30,20 @@ const fmtDate=value=>value?new Intl.DateTimeFormat('fr-FR',{weekday:'short',day:
 const fmtDateTime=value=>value?new Intl.DateTimeFormat('fr-FR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Paris'}).format(new Date(value)):'À confirmer'
 const daysUntil=value=>Math.ceil((new Date(value).setHours(0,0,0,0)-new Date().setHours(0,0,0,0))/86400000)
 const initials=name=>name.split(/\s+/).map(x=>x[0]).join('').slice(0,2).toUpperCase()
+const fmtMoney=value=>value==null?'Montant à confirmer':new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(Number(value))
+const isPrioritySource=item=>/l[ée]o\s+tagawa|stephane\s+saliu|st[ée]phane\s+saliu/i.test(`${item?.sender_name||''} ${item?.sender_address||''}`)
+const missionDocs=id=>state.documents.filter(x=>x.mission_id===id)
+const missionInbox=id=>state.inbox.filter(x=>x.matched_mission_id===id)
+const seenKey=()=>`travel:last-seen:${state.current?.id||'unknown'}`
+function freshItems(){
+  const saved=Number(localStorage.getItem(seenKey())||0)
+  const floor=saved||Date.now()-72*60*60*1000
+  const items=[...state.documents.map(x=>({key:x.metadata?.gmail_message_id||x.id,at:x.created_at,label:x.file_name||'Nouveau document'})),...state.inbox.map(x=>({key:x.external_id||x.id,at:x.received_at,label:x.subject||'Nouvelle information'}))]
+  const unique=new Map();items.forEach(x=>{const old=unique.get(x.key);if(!old||new Date(x.at)>new Date(old.at))unique.set(x.key,x)})
+  return [...unique.values()].filter(x=>new Date(x.at).getTime()>floor).sort((a,b)=>new Date(b.at)-new Date(a.at))
+}
+function markNewsSeen(){localStorage.setItem(seenKey(),String(Date.now()));updateNotificationUI();if(state.page==='home')go('home')}
+function updateNotificationUI(){const count=freshItems().length,badge=$('notificationCount'),button=$('notificationBtn');if(badge)badge.textContent=count>9?'9+':String(count);if(button)button.classList.toggle('has-news',count>0)}
 
 function toast(message,error=false){const el=$('toast');el.textContent=message;el.className='toast show'+(error?' error':'');setTimeout(()=>el.classList.remove('show'),2600)}
 function renderProfiles(){
@@ -68,8 +82,8 @@ async function enterApp(){
   document.querySelectorAll('.manager-only').forEach(el=>el.classList.toggle('hidden',!state.current.manager))
   await loadData();go('home')
 }
-async function loadData(){
-  $('pageContent').innerHTML='<div class="loading-card">Synchronisation de vos informations…</div>'
+async function loadData(showLoading=true){
+  if(showLoading)$('pageContent').innerHTML='<div class="loading-card">Synchronisation de vos informations…</div>'
   const queries={
     missions:state.sb.from('travel_missions').select('*').order('starts_at'),
     matches:state.sb.from('travel_matches').select('*').eq('season','2026/27').order('kickoff_at'),
@@ -77,13 +91,15 @@ async function loadData(){
     legs:state.sb.from('travel_legs').select('*').order('leg_order'),
     documents:state.sb.from('travel_documents').select('*').order('document_date',{ascending:false}),
     apps:state.sb.from('travel_app_links').select('*').eq('active',true).order('label'),
-    members:state.sb.from('travel_team_members').select('*').eq('active',true).order('display_order')
+    members:state.sb.from('travel_team_members').select('*').eq('active',true).order('display_order'),
+    inbox:state.sb.from('travel_inbox').select('*').order('received_at',{ascending:false}).limit(40)
   }
-  if(state.current.manager){queries.inbox=state.sb.from('travel_inbox').select('*').order('received_at',{ascending:false}).limit(30);queries.changes=state.sb.from('travel_change_log').select('*').eq('requires_attention',true).is('acknowledged_at',null).order('created_at',{ascending:false})}
+  if(state.current.manager)queries.changes=state.sb.from('travel_change_log').select('*').eq('requires_attention',true).is('acknowledged_at',null).order('created_at',{ascending:false})
   const entries=Object.entries(queries);const results=await Promise.all(entries.map(([,query])=>query))
   const failures=[]
   results.forEach((result,i)=>{const key=entries[i][0];if(result.error)failures.push(key);else state[key]=result.data||[]})
   if(failures.length)toast(`Données indisponibles : ${failures.join(', ')}`,true)
+  updateNotificationUI()
 }
 function go(page){
   if(page==='inbox'&&!state.current.manager)page='home';state.page=page
@@ -92,10 +108,12 @@ function go(page){
   $('pageEyebrow').textContent=meta[page][0];$('pageTitle').textContent=meta[page][1]
   const pages={home:homePage,trips:tripsPage,documents:documentsPage,apps:appsPage,inbox:inboxPage}
   $('pageContent').innerHTML=pages[page]();bindPage();window.scrollTo({top:0,behavior:'smooth'})
+  if(page==='home'){const mission=nextAssignedMission();if(mission)loadWeather(mission,dateOf(mission),'homeWeatherCard')}
 }
 function bindPage(){
   document.querySelectorAll('[data-mission]').forEach(btn=>btn.onclick=()=>openMission(btn.dataset.mission))
   document.querySelectorAll('#pageContent [data-page]').forEach(btn=>btn.onclick=()=>go(btn.dataset.page))
+  document.querySelectorAll('[data-mark-seen]').forEach(btn=>btn.onclick=markNewsSeen)
   const filter=$('personFilter');if(filter)filter.onchange=()=>renderTripList(filter.value)
 }
 function appCatalog(){
@@ -111,15 +129,42 @@ function tripCard(m){
   return `<button class="trip-card" data-mission="${m.id}"><span class="trip-date"><strong>${date?new Date(date).toLocaleDateString('fr-FR',{day:'2-digit',timeZone:'Europe/Paris'}):'--'}</strong><small>${date?new Date(date).toLocaleDateString('fr-FR',{month:'short',timeZone:'Europe/Paris'}):''}</small></span><span class="trip-main"><span class="trip-top"><em>${esc(match.competition||'Déplacement')}</em><i>${esc(badge)}</i></span><strong>${esc(match.home_team||m.destination_city||m.title)}</strong><small>${esc(m.destination_city||match.city||'Lieu à confirmer')} · ${names.length?esc(names.join(' + ')):'Équipe à définir'}</small></span><span class="trip-progress"><b>${m.completeness_score}%</b><i><u style="width:${m.completeness_score}%"></u></i></span><span class="arrow">›</span></button>`
 }
 function nextAssignedMission(){return state.missions.filter(m=>isFuture(m)&&assignmentNames(m.id).includes(state.current.name)).sort((a,b)=>new Date(dateOf(a)||'2999')-new Date(dateOf(b)||'2999'))[0]}
+function sourceInbox(doc){return state.inbox.find(x=>x.id===doc?.inbox_id)||{}}
+function hotelForMission(id){
+  const docs=missionDocs(id),direct=hotelName(docs);if(direct)return direct
+  const text=missionInbox(id).map(x=>`${x.subject||''} ${x.raw_text||''}`).join(' ')
+  const known=text.match(/(?:Novotel Rennes Alma|Marriott[^,.;\n]*|Mercure[^,.;\n]*|Pullman[^,.;\n]*|Novotel[^,.;\n]*)/i)
+  return known?.[0]||'Hôtel à confirmer'
+}
+function currentQuotes(id){return missionDocs(id).filter(x=>x.document_type==='caterer_quote'&&x.metadata?.is_current!==false&&x.metadata?.document_status!=='request').sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))}
+function quoteSummary(doc){
+  if(!doc)return '<div class="empty-dashboard">Aucune offre reçue pour ce déplacement.</div>'
+  const meta=doc.metadata||{},source=sourceInbox(doc),supplier=meta.supplier||meta.supplier_name||source.sender_name||'Traiteur',url=safeUrl(doc.source_url||'#')
+  return `<a class="quote-glance" href="${url}" ${url!=='#'?'target="_blank" rel="noopener"':''}><span class="glance-icon gold">€</span><div><em>${esc(meta.supplier_type||'traiteur')} · offre active</em><strong>${esc(supplier)}</strong><small>${fmtMoney(meta.amount_ttc)} TTC${source.sender_address?` · ${esc(source.sender_address)}`:''}</small></div><b>Voir →</b></a>`
+}
+function priorityUpdate(id){return missionInbox(id).filter(isPrioritySource).sort((a,b)=>new Date(b.received_at)-new Date(a.received_at))[0]}
+function travelUpdateCard(item){
+  if(!item)return '<div class="empty-dashboard">La prochaine information de Léo Tagawa ou Stéphane Saliu apparaîtra ici.</div>'
+  return `<article class="mail-glance"><div><span class="glance-icon">✉</span><p><em>${esc(item.sender_name||'Travel OM')}</em><time>${fmtDateTime(item.received_at)}</time></p></div><strong>${esc(item.subject||'Information Travel')}</strong><small>${esc(item.raw_text||'')}</small></article>`
+}
 function homePage(){
   const next=nextAssignedMission(),match=next?matchOf(next):{},names=next?assignmentNames(next.id):[],date=next?dateOf(next):null
   const alerts=state.current.manager?state.changes.length:0
-  return `<div class="welcome"><div><span class="eyebrow">BONJOUR ${esc(state.current.first.toUpperCase())}</span><h2>Votre espace déplacement</h2><p>Feuilles de route, billets, hôtel, documents et outils réunis au même endroit.</p></div><div class="live-chip"><i></i> Mails synchronisés</div></div>
+  const docs=next?missionDocs(next.id):[],legs=next?state.legs.filter(x=>x.mission_id===next.id):[],outbound=legs.find(x=>x.direction==='outbound'),roadmap=docs.find(x=>x.document_type==='roadmap'),quotes=next?currentQuotes(next.id):[],latest=next?priorityUpdate(next.id):null,news=freshItems()
+  return `<div class="welcome"><div><span class="eyebrow">BONJOUR ${esc(state.current.first.toUpperCase())}</span><h2>Votre briefing déplacement</h2><p>Les informations importantes, mises à jour automatiquement.</p></div><div class="live-chip"><i></i> En direct</div></div>
+  ${news.length?`<div class="news-banner"><span>●</span><div><strong>${news.length} nouveauté${news.length>1?'s':''} depuis votre dernière consultation</strong><small>${esc(news[0].label)}</small></div><button type="button" data-mark-seen>Marquer comme vu</button></div>`:''}
   ${next?`<article class="next-trip"><div class="next-trip-head"><span>${esc(match.competition||'PROCHAIN DÉPLACEMENT')}</span><b>${date&&daysUntil(date)>=0?`J-${daysUntil(date)}`:'À venir'}</b></div><div class="next-trip-body"><div><p>${fmtDate(date)}</p><h2>${esc(match.home_team||next.destination_city)} <small>— OM</small></h2><span>${esc(match.venue_name||next.destination_city||'Lieu à confirmer')}</span></div><div class="team-bubbles">${names.map(n=>`<i title="${esc(n)}">${initials(n)}</i>`).join('')}</div></div><div class="next-trip-foot"><div><span>Préparation</span><strong>${next.completeness_score}%</strong><i><u style="width:${next.completeness_score}%"></u></i></div><button data-mission="${next.id}">Ouvrir le dossier →</button></div></article>`:'<article class="empty-card">Aucun déplacement affecté pour le moment.</article>'}
-  <div class="section-title"><div><p class="eyebrow">ÉQUIPE API</p><h3>Binômes enregistrés</h3></div><button class="text-btn" data-page="trips">Voir le planning</button></div>
-  <div class="team-grid">${TEAM.map(p=>`<article><span style="--profile:${p.color}">${p.initials}</span><div><strong>${esc(p.name)}</strong><small>${esc(p.role)}</small></div><b>${ROSTER_COUNTS[p.name]}<small>départs</small></b></article>`).join('')}</div>
+  ${next?`<div class="boarding-grid">
+    <section class="dashboard-panel span-2"><div class="panel-head"><div><p class="eyebrow">DERNIÈRE INFORMATION TRAVEL</p><h3>Léo Tagawa & Stéphane Saliu</h3></div><span class="live-dot">● Synchronisé</span></div>${travelUpdateCard(latest)}</section>
+    <section class="dashboard-panel"><div class="panel-head"><div><p class="eyebrow">HÔTEL</p><h3>${esc(next.destination_city||'Déplacement')}</h3></div><span class="panel-icon">⌂</span></div><strong class="key-value">${esc(hotelForMission(next.id))}</strong><small class="key-detail">${docs.some(x=>x.document_type==='hotel_confirmation'||x.document_type==='rooming')?'Confirmation disponible':'Informations issues du dernier mail Travel'}</small></section>
+    <section id="homeWeatherCard" class="dashboard-panel weather-panel"><div class="panel-head"><div><p class="eyebrow">MÉTÉO</p><h3>${esc(next.destination_city||'Destination')}</h3></div><span class="panel-icon">☀</span></div><strong class="key-value">Chargement…</strong></section>
+    <section class="dashboard-panel"><div class="panel-head"><div><p class="eyebrow">TRANSPORT</p><h3>Départ</h3></div><span class="panel-icon">✈</span></div><strong class="key-value">${outbound?fmtDateTime(outbound.scheduled_departure):'Horaire attendu'}</strong><small class="key-detail">${roadmap?`Feuille de route disponible`:'Synchronisation du mail Travel active'}</small></section>
+    <section class="dashboard-panel span-2"><div class="panel-head"><div><p class="eyebrow">RESTAURATION EXTÉRIEURE</p><h3>Offres traiteurs</h3></div><button class="text-btn" data-page="documents">Toutes les offres</button></div>${quoteSummary(quotes[0])}${quotes.length>1?`<small class="more-offers">+ ${quotes.length-1} autre${quotes.length>2?'s':''} offre${quotes.length>2?'s':''} disponible${quotes.length>2?'s':''}</small>`:''}</section>
+  </div>`:''}
   ${alerts?`<div class="notice warning"><b>!</b><div><strong>${alerts} information${alerts>1?'s':''} à confirmer</strong><span>Les dates du tableau et du calendrier officiel diffèrent pour Troyes et Angers. Aucune date officielle n’a été écrasée.</span></div><button data-page="inbox">Voir</button></div>`:''}
-  <div class="section-title"><div><p class="eyebrow">OUTILS TERRAIN</p><h3>Accès directs</h3></div></div>${appCards(true)}`
+  <div class="section-title"><div><p class="eyebrow">ACCÈS APPLICATIONS</p><h3>Outils terrain</h3></div><button class="text-btn" data-page="apps">Tous les accès</button></div>${appCards(true)}
+  <div class="section-title"><div><p class="eyebrow">ÉQUIPE API</p><h3>Binômes enregistrés</h3></div><button class="text-btn" data-page="trips">Voir le planning</button></div>
+  <div class="team-grid">${TEAM.map(p=>`<article><span style="--profile:${p.color}">${p.initials}</span><div><strong>${esc(p.name)}</strong><small>${esc(p.role)}</small></div><b>${ROSTER_COUNTS[p.name]}<small>départs</small></b></article>`).join('')}</div>`
 }
 function tripsPage(){
   const options=state.current.manager?`<select id="personFilter"><option value="all">Tous les déplacements</option>${TEAM.map(p=>`<option value="${esc(p.name)}">${esc(p.first)}</option>`).join('')}<option value="unassigned">Équipe à définir</option></select>`:''
@@ -158,32 +203,51 @@ function openMission(id){
   <section><p class="eyebrow">INFORMATIONS DE VOYAGE</p><div class="info-grid"><article><span>✈</span><small>Départ</small><strong>${legs.find(x=>x.direction==='outbound')?fmtDateTime(legs.find(x=>x.direction==='outbound').scheduled_departure):'Feuille de route attendue'}</strong></article><article><span>⌂</span><small>Hôtel</small><strong>${hotelName(docs)||'À confirmer'}</strong></article><article id="weatherCard"><span>☀</span><small>Météo</small><strong>Chargement…</strong></article></div></section>
   <section><div class="section-title"><div><p class="eyebrow">DOCUMENTS</p><h3>Dossier du déplacement</h3></div></div><div class="document-list compact-docs">${docs.length?docs.map(documentCard).join(''):'<div class="empty-inline">Feuille de route, billets et hôtel seront ajoutés automatiquement à leur réception.</div>'}</div></section>
   <section><p class="eyebrow">APPLICATIONS</p>${appCards(true)}</section></div>`
-  $('tripDialog').showModal();loadWeather(mission,date)
+  $('tripDialog').showModal();loadWeather(mission,date,'weatherCard')
 }
 function hotelName(docs){const d=docs.find(x=>x.document_type==='hotel_confirmation'||x.document_type==='rooming');return d?.metadata?.hotel_name||d?.metadata?.hotel||null}
-async function loadWeather(mission,date){
-  const card=$('weatherCard');if(!card)return
+async function loadWeather(mission,date,cardId='weatherCard'){
+  const card=$(cardId);if(!card)return
   const city=mission.destination_city;if(!city){card.querySelector('strong').textContent='Ville à confirmer';return}
   const search=`https://www.google.com/search?q=${encodeURIComponent(`météo ${city}`)}`
   const delta=date?Math.floor((new Date(date)-Date.now())/86400000):99
-  if(delta>15||delta<-2){card.innerHTML=`<span>☀</span><small>Météo</small><strong>Prévision disponible à J-15</strong><a href="${search}" target="_blank" rel="noopener">Voir la météo ↗</a>`;return}
+  if(delta>15||delta<-2){
+    if(card.classList.contains('dashboard-panel'))card.innerHTML=`<div class="panel-head"><div><p class="eyebrow">MÉTÉO</p><h3>${esc(city)}</h3></div><span class="panel-icon">☀</span></div><strong class="key-value">Disponible à J-15</strong><a class="weather-link" href="${search}" target="_blank" rel="noopener">Voir la météo ↗</a>`
+    else card.innerHTML=`<span>☀</span><small>Météo</small><strong>Prévision disponible à J-15</strong><a href="${search}" target="_blank" rel="noopener">Voir la météo ↗</a>`
+    return
+  }
   try{
     const geo=await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=fr&format=json`).then(r=>r.json());const loc=geo.results?.[0];if(!loc)throw new Error()
     const day=new Date(date||Date.now()).toISOString().slice(0,10)
     const data=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${loc.latitude}&longitude=${loc.longitude}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=Europe%2FParis&start_date=${day}&end_date=${day}`).then(r=>r.json())
     const max=data.daily?.temperature_2m_max?.[0],min=data.daily?.temperature_2m_min?.[0],rain=data.daily?.precipitation_probability_max?.[0]
     if(max==null||min==null)throw new Error()
-    card.innerHTML=`<span>☀</span><small>Météo prévue</small><strong>${Math.round(min)}° / ${Math.round(max)}° · pluie ${rain??0}%</strong><a href="${search}" target="_blank" rel="noopener">Détail ↗</a>`
-  }catch{card.innerHTML=`<span>☀</span><small>Météo</small><strong>Prévision indisponible</strong><a href="${search}" target="_blank" rel="noopener">Voir la météo ↗</a>`}
+    const content=`${Math.round(min)}° / ${Math.round(max)}° · pluie ${rain??0}%`
+    if(card.classList.contains('dashboard-panel'))card.innerHTML=`<div class="panel-head"><div><p class="eyebrow">MÉTÉO PRÉVUE</p><h3>${esc(city)}</h3></div><span class="panel-icon">☀</span></div><strong class="key-value">${content}</strong><a class="weather-link" href="${search}" target="_blank" rel="noopener">Détail ↗</a>`
+    else card.innerHTML=`<span>☀</span><small>Météo prévue</small><strong>${content}</strong><a href="${search}" target="_blank" rel="noopener">Détail ↗</a>`
+  }catch{
+    if(card.classList.contains('dashboard-panel'))card.innerHTML=`<div class="panel-head"><div><p class="eyebrow">MÉTÉO</p><h3>${esc(city)}</h3></div><span class="panel-icon">☀</span></div><strong class="key-value">Prévision indisponible</strong><a class="weather-link" href="${search}" target="_blank" rel="noopener">Voir la météo ↗</a>`
+    else card.innerHTML=`<span>☀</span><small>Météo</small><strong>Prévision indisponible</strong><a href="${search}" target="_blank" rel="noopener">Voir la météo ↗</a>`
+  }
+}
+async function refreshDashboard(){
+  if(!state.current||document.hidden)return
+  await loadData(false)
+  if(state.page==='home'){
+    $('pageContent').innerHTML=homePage();bindPage()
+    const mission=nextAssignedMission();if(mission)loadWeather(mission,dateOf(mission),'homeWeatherCard')
+  }
 }
 async function logout(){await state.sb.auth.signOut();state.current=null;state.pin='';state.selected=null;$('appShell').classList.add('hidden');$('loginScreen').classList.remove('hidden');$('pinStep').classList.add('hidden');$('profileStep').classList.remove('hidden')}
 async function boot(){
   if(!window.supabase){$('profileGrid').innerHTML='<div class="pin-error">Connexion sécurisée indisponible.</div>';return}
   state.sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}})
-  renderProfiles();$('backProfiles').onclick=()=>{$('pinStep').classList.add('hidden');$('profileStep').classList.remove('hidden');state.pin='';state.selected=null};$('logoutBtn').onclick=logout
+  renderProfiles();$('backProfiles').onclick=()=>{$('pinStep').classList.add('hidden');$('profileStep').classList.remove('hidden');state.pin='';state.selected=null};$('logoutBtn').onclick=logout;$('notificationBtn').onclick=()=>{localStorage.setItem(seenKey(),String(Date.now()));go('home');updateNotificationUI()}
   document.querySelectorAll('[data-page]').forEach(btn=>btn.onclick=()=>go(btn.dataset.page))
   const {data}=await state.sb.auth.getSession();const user=data?.session?.user
   const known=TEAM.find(p=>p.id===user?.id)
   if(known){state.current=known;state.selected=known;await enterApp()}else if(user){await state.sb.auth.signOut()}
+  state.refreshTimer=setInterval(refreshDashboard,90000)
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshDashboard()})
 }
 boot()
