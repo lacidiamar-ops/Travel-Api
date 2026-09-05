@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="Cahier des charges">
+  <rect width="96" height="96" rx="24" fill="#0b83c9"/>
+  <path d="M28 18h31l13 13v47H28z" fill="#fff"/>
+  <path d="M59 18v14h13" fill="#d8edf7"/>
+  <path d="M39 45h22M39 55h22M39 65h15" fill="none" stroke="#0b83c9" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="24" cy="25" r="10" fill="#c7a455"/>
+  <path d="m20 25 3 3 6-7" fill="none" stroke="#071b2f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

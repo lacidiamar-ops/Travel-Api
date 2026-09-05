@@ -10,8 +10,9 @@ const TEAM=[
 ]
 const ROSTER_COUNTS={'Amar Lacidi':5,'Igal Settbon':7,'Bastien Florido':5,'Damien Cau':5}
 const FALLBACK_APPS=[
-  {app_type:'hotel_audit',label:'Audit Hôtel',description:"Contrôle de l'hôtel et suivi des corrections",icon:'⌂'},
-  {app_type:'cahier_des_charges',label:'Cahier des charges',description:'Consignes hôtel, déplacement et chiffrage',icon:'▤'}
+  {app_type:'hotel_audit',label:'Audit Hôtel',description:"Contrôle de l'hôtel et suivi des corrections",logo:'assets/apps/audit-hotel.svg'},
+  {app_type:'cahier_des_charges',label:'Cahier des charges',description:'Consignes hôtel, déplacement et chiffrage',logo:'assets/apps/cahier-des-charges.svg'},
+  {app_type:'after_match_meals',label:'Repas après-match',description:'Choix et organisation des repas après-match',logo:'assets/apps/repas-apres-match.svg'}
 ]
 const CONTACTS=[
   {name:'Léo Tagawa',role:'Travel Manager OM'},
@@ -112,6 +113,7 @@ function go(page){
 }
 function bindPage(){
   document.querySelectorAll('[data-mission]').forEach(btn=>btn.onclick=()=>openMission(btn.dataset.mission))
+  document.querySelectorAll('[data-offer]').forEach(btn=>btn.onclick=()=>openOffer(btn.dataset.offer))
   document.querySelectorAll('#pageContent [data-page]').forEach(btn=>btn.onclick=()=>go(btn.dataset.page))
   document.querySelectorAll('[data-mark-seen]').forEach(btn=>btn.onclick=markNewsSeen)
   const filter=$('personFilter');if(filter)filter.onchange=()=>renderTripList(filter.value)
@@ -119,9 +121,9 @@ function bindPage(){
 function appCatalog(){
   const merged=FALLBACK_APPS.map(f=>({...f,...state.apps.find(a=>a.app_type===f.app_type||a.label===f.label)}))
   const extra=state.apps.filter(a=>!merged.some(x=>x.external_key===a.external_key||x.url===a.url))
-  return [...merged,...extra.map(a=>({...a,description:'Accès lié au déplacement',icon:'↗'}))]
+  return [...merged,...extra.map(a=>({...a,description:'Accès lié au déplacement',logo:'assets/apps/application.svg'}))]
 }
-function appCards(compact=false){return `<div class="app-grid ${compact?'compact':''}">${appCatalog().map(a=>{const url=safeUrl(a.url);return `<a class="app-card ${url==='#'?'disabled':''}" href="${url}" ${url!=='#'?'target="_blank" rel="noopener"':''}><span class="app-icon">${a.icon||'↗'}</span><div><strong>${esc(a.label)}</strong><small>${esc(a.description||'Ouvrir l’application')}</small></div><b>${url==='#'?'—':'↗'}</b></a>`}).join('')}</div>`}
+function appCards(compact=false){return `<div class="app-grid ${compact?'compact':''}">${appCatalog().map(a=>{const url=safeUrl(a.url);return `<a class="app-card ${url==='#'?'disabled':''}" href="${url}" ${url!=='#'?'target="_blank" rel="noopener"':''}><span class="app-icon"><img src="${esc(a.logo||'assets/apps/application.svg')}" alt=""></span><div><strong>${esc(a.label)}</strong><small>${esc(a.description||'Ouvrir l’application')}</small></div><b>${url==='#'?'—':'↗'}</b></a>`}).join('')}</div>`}
 function assignmentNames(missionId){return state.assignments.filter(a=>a.mission_id===missionId).map(a=>a.employee_name)}
 function tripCard(m){
   const match=matchOf(m),date=dateOf(m),d=date?daysUntil(date):null,names=assignmentNames(m.id)
@@ -137,11 +139,37 @@ function hotelForMission(id){
   return known?.[0]||'Hôtel à confirmer'
 }
 function currentQuotes(id){return missionDocs(id).filter(x=>x.document_type==='caterer_quote'&&x.metadata?.is_current!==false&&x.metadata?.document_status!=='request').sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))}
+function supplierName(doc){const meta=doc?.metadata||{},source=sourceInbox(doc);return meta.supplier||meta.supplier_name||source.sender_name||'Prestataire'}
+function supplierKey(doc){const name=supplierName(doc);if(/tripletta/i.test(name))return'tripletta';if(/\bmrm\b|monsieur\s+m/i.test(name))return'mrm';return name.toLowerCase().replace(/rennes|mf|traiteur|[^a-z0-9]/g,'')}
+function providerLabel(type){return ({pizza:'Pizzeria',pizzeria:'Pizzeria',sushi:'Restaurant sushi',restaurant:'Restaurant',traiteur:'Traiteur'})[type]||'Prestataire'}
+function humanQuantity(key){return ({
+  tenders_halal:'Tenders de poulet halal',pilons_tex_mex_halal:'Pilons tex-mex halal',mini_croques_dinde_halal:'Mini croque-monsieur dinde halal',cromesquis_pomme_de_terre_emmental:'Cromesquis pomme de terre & emmental',energy_balls_coco:'Energy balls coco',coca_zero_50cl:'Coca-Cola Zéro 50 cl',coca_classique_50cl:'Coca-Cola 50 cl',san_pellegrino_50cl:'San Pellegrino 50 cl',boites_burger:'Boîtes burger',sacs_poubelle_30l:'Sacs-poubelle 30 L',gants_xl:'Paires de gants XL',tables_pliantes:'Tables pliantes avec housse noire',etuve_10_niveaux:'Étuve ventilée 10 niveaux',kits_couverts:'Kits couverts',carrot_cake:'Carrot cake'
+})[key]||key.replaceAll('_',' ')}
+function offerSections(doc){
+  const meta=doc?.metadata||{}
+  if(Array.isArray(meta.offer_sections))return meta.offer_sections
+  if(meta.quantities&&typeof meta.quantities==='object'){
+    return [{title:'Contenu de l’offre',items:Object.entries(meta.quantities).filter(([,q])=>Number(q)>0).map(([key,quantity])=>({name:humanQuantity(key),quantity}))}]
+  }
+  const lines=String(doc?.extracted_text||'').split(/\n|;|\.(?:\s+|$)/).map(x=>x.trim()).filter(x=>x.length>8&&!/€|total|tva|acompte|prix|tarif/i.test(x)).slice(0,12)
+  return lines.length?[{title:'Synthèse extraite',items:lines.map(name=>({name}))}]:[]
+}
+function offerItems(doc){return offerSections(doc).flatMap(section=>section.items||[])}
+function deliverySummary(doc){
+  const m=doc?.metadata||{}
+  if(m.delivery_summary)return m.delivery_summary
+  const parts=[]
+  if(m.equipment_delivery)parts.push(`Matériel : ${m.equipment_delivery}`)
+  if(m.food_delivery_time)parts.push(`Nourriture : ${m.food_delivery_time}`)
+  if(m.single_delivery_requested)parts.push('Une livraison demandée, deux possibles si nécessaire')
+  return parts.join(' · ')||'Organisation à confirmer'
+}
 function quoteSummary(doc){
   if(!doc)return '<div class="empty-dashboard">Aucune offre reçue pour ce déplacement.</div>'
-  const meta=doc.metadata||{},source=sourceInbox(doc),supplier=meta.supplier||meta.supplier_name||source.sender_name||'Traiteur',url=safeUrl(doc.source_url||'#')
-  return `<a class="quote-glance" href="${url}" ${url!=='#'?'target="_blank" rel="noopener"':''}><span class="glance-icon gold">€</span><div><em>${esc(meta.supplier_type||'traiteur')} · offre active</em><strong>${esc(supplier)}</strong><small>${fmtMoney(meta.amount_ttc)} TTC${source.sender_address?` · ${esc(source.sender_address)}`:''}</small></div><b>Voir →</b></a>`
+  const meta=doc.metadata||{},items=offerItems(doc),preview=items.slice(0,3).map(i=>`${i.quantity?`${i.quantity} × `:''}${i.name}`).join(' · ')
+  return `<button class="quote-glance" type="button" data-offer="${doc.id}"><span class="glance-icon gold">🍽</span><div><em>${esc(providerLabel(meta.supplier_type))} · fiche à jour</em><strong>${esc(supplierName(doc))}</strong><small>${esc(preview||deliverySummary(doc))}${items.length>3?` · +${items.length-3} éléments`:''}</small></div><b>Ouvrir →</b></button>`
 }
+function quoteList(quotes){return quotes.length?`<div class="quote-stack">${quotes.map(quoteSummary).join('')}</div>`:'<div class="empty-dashboard">Aucune offre reçue pour ce déplacement.</div>'}
 function priorityUpdate(id){return missionInbox(id).filter(isPrioritySource).sort((a,b)=>new Date(b.received_at)-new Date(a.received_at))[0]}
 function travelUpdateCard(item){
   if(!item)return '<div class="empty-dashboard">La prochaine information de Léo Tagawa ou Stéphane Saliu apparaîtra ici.</div>'
@@ -159,7 +187,7 @@ function homePage(){
     <section class="dashboard-panel"><div class="panel-head"><div><p class="eyebrow">HÔTEL</p><h3>${esc(next.destination_city||'Déplacement')}</h3></div><span class="panel-icon">⌂</span></div><strong class="key-value">${esc(hotelForMission(next.id))}</strong><small class="key-detail">${docs.some(x=>x.document_type==='hotel_confirmation'||x.document_type==='rooming')?'Confirmation disponible':'Informations issues du dernier mail Travel'}</small></section>
     <section id="homeWeatherCard" class="dashboard-panel weather-panel"><div class="panel-head"><div><p class="eyebrow">MÉTÉO</p><h3>${esc(next.destination_city||'Destination')}</h3></div><span class="panel-icon">☀</span></div><strong class="key-value">Chargement…</strong></section>
     <section class="dashboard-panel"><div class="panel-head"><div><p class="eyebrow">TRANSPORT</p><h3>Départ</h3></div><span class="panel-icon">✈</span></div><strong class="key-value">${outbound?fmtDateTime(outbound.scheduled_departure):'Horaire attendu'}</strong><small class="key-detail">${roadmap?`Feuille de route disponible`:'Synchronisation du mail Travel active'}</small></section>
-    <section class="dashboard-panel span-2"><div class="panel-head"><div><p class="eyebrow">RESTAURATION EXTÉRIEURE</p><h3>Offres traiteurs</h3></div><button class="text-btn" data-page="documents">Toutes les offres</button></div>${quoteSummary(quotes[0])}${quotes.length>1?`<small class="more-offers">+ ${quotes.length-1} autre${quotes.length>2?'s':''} offre${quotes.length>2?'s':''} disponible${quotes.length>2?'s':''}</small>`:''}</section>
+    <section class="dashboard-panel span-2"><div class="panel-head"><div><p class="eyebrow">RESTAURATION EXTÉRIEURE</p><h3>Fiches prestataires</h3></div><button class="text-btn" data-page="documents">Toutes les fiches</button></div>${quoteList(quotes)}</section>
   </div>`:''}
   ${alerts?`<div class="notice warning"><b>!</b><div><strong>${alerts} information${alerts>1?'s':''} à confirmer</strong><span>Les dates du tableau et du calendrier officiel diffèrent pour Troyes et Angers. Aucune date officielle n’a été écrasée.</span></div><button data-page="inbox">Voir</button></div>`:''}
   <div class="section-title"><div><p class="eyebrow">ACCÈS APPLICATIONS</p><h3>Outils terrain</h3></div><button class="text-btn" data-page="apps">Tous les accès</button></div>${appCards(true)}
@@ -176,18 +204,24 @@ function tripListHtml(filter){
 }
 function renderTripList(filter){$('tripList').innerHTML=tripListHtml(filter);bindPage()}
 function documentsPage(){
-  const docs=state.documents,quotes=docs.filter(doc=>doc.document_type==='caterer_quote'),travelDocs=docs.filter(doc=>doc.document_type!=='caterer_quote')
+  const docs=state.documents,quotes=docs.filter(doc=>doc.document_type==='caterer_quote'&&doc.metadata?.is_current!==false&&doc.metadata?.document_status!=='request'),requests=docs.filter(doc=>doc.document_type==='caterer_quote'&&doc.metadata?.document_status==='request'),travelDocs=docs.filter(doc=>doc.document_type!=='caterer_quote')
   return `<div class="page-tools"><p>${docs.length} document${docs.length!==1?'s':''} accessible${docs.length!==1?'s':''} avec votre profil.</p></div>
-  <div class="section-title"><div><p class="eyebrow">REÇUS PAR MAIL</p><h3>Devis traiteurs, pizzas & sushi</h3></div></div>
-  <div class="document-list">${quotes.length?quotes.map(documentCard).join(''):'<div class="empty-card">Les demandes et devis des traiteurs, pizzerias et restaurants sushi apparaîtront ici dès leur réception.</div>'}</div>
+  <div class="section-title"><div><p class="eyebrow">OFFRES REÇUES PAR MAIL</p><h3>Fiches traiteurs, pizzas & sushi</h3></div></div>
+  <div class="supplier-grid">${quotes.length?quotes.map(supplierCard).join(''):'<div class="empty-card">Les offres des traiteurs, pizzerias et restaurants sushi apparaîtront ici dès leur réception.</div>'}</div>
+  ${state.current.manager&&requests.length?`<div class="section-title"><div><p class="eyebrow">CONSULTATIONS EN COURS</p><h3>Demandes envoyées</h3></div></div><div class="document-list">${requests.map(documentCard).join('')}</div>`:''}
   <div class="section-title"><div><p class="eyebrow">DOSSIER DE VOYAGE</p><h3>Autres documents</h3></div></div>
   <div class="document-list">${travelDocs.length?travelDocs.map(documentCard).join(''):'<div class="empty-card">Les feuilles de route, billets et confirmations d’hôtel apparaîtront ici dès leur réception.</div>'}</div>`
+}
+function supplierCard(doc){
+  const meta=doc.metadata||{},items=offerItems(doc),mission=missionOf(doc.mission_id),updated=meta.summary_updated_at||doc.document_date||doc.created_at
+  return `<button class="supplier-card" type="button" data-offer="${doc.id}"><div class="supplier-card-head"><span>🍽</span><div><em>${esc(providerLabel(meta.supplier_type))}</em><strong>${esc(supplierName(doc))}</strong></div><i>À jour</i></div><p>${esc(items.slice(0,4).map(x=>x.name).join(' · ')||'Synthèse de l’offre disponible')}</p><div><small>${esc(mission?.destination_city||'Déplacement')} · mis à jour ${fmtDateTime(updated)}</small><b>Voir la fiche →</b></div></button>`
 }
 function documentCard(doc){
   const mission=missionOf(doc.mission_id),url=safeUrl(doc.source_url||'#')
   const quoteLabel=doc.metadata?.document_status==='request'?'Demande de devis':`Devis ${doc.metadata?.supplier_type||'traiteur'}`
   const labels={roadmap:'Feuille de route',flight_ticket:"Billet d'avion",train_ticket:'Billet de train',hotel_confirmation:'Hôtel',rooming:'Rooming',menu:'Menu',cdc:'Cahier des charges',audit:'Audit hôtel',invoice:'Facture',caterer_quote:quoteLabel,other:'Document'}
   const icon=doc.document_type==='flight_ticket'?'✈':doc.document_type==='hotel_confirmation'?'⌂':doc.document_type==='caterer_quote'?'€':'▤'
+  if(doc.document_type==='caterer_quote'&&doc.metadata?.document_status!=='request')return supplierCard(doc)
   return `<a class="document-card" href="${url}" ${url!=='#'?'target="_blank" rel="noopener"':''}><span>${icon}</span><div><em>${esc(labels[doc.document_type]||'Document')}</em><strong>${esc(doc.file_name||labels[doc.document_type]||'Document')}</strong><small>${esc(mission?.destination_city||'Saison 2026-2027')} · ${fmtDate(doc.document_date||doc.created_at)}</small></div><b>${url==='#'?'À venir':'↗'}</b></a>`
 }
 function appsPage(){return `<div class="page-intro"><h2>Tout le nécessaire sur le terrain</h2><p>Chaque outil s’ouvre dans son application dédiée, avec ses propres droits d’accès.</p></div>${appCards()}<div class="contact-panel"><div class="section-title"><div><p class="eyebrow">SOURCES VOYAGE</p><h3>Informations synchronisées</h3></div></div>${CONTACTS.map(c=>`<div class="contact-row"><span>${initials(c.name)}</span><div><strong>${c.name}</strong><small>${c.role}</small></div><b>Synchronisé</b></div>`).join('')}</div>`}
@@ -197,13 +231,34 @@ function inboxPage(){
 }
 function openMission(id){
   const mission=missionOf(id);if(!mission)return
-  const match=matchOf(mission),names=assignmentNames(id),legs=state.legs.filter(x=>x.mission_id===id),docs=state.documents.filter(x=>x.mission_id===id),date=dateOf(mission)
+  const match=matchOf(mission),names=assignmentNames(id),legs=state.legs.filter(x=>x.mission_id===id),docs=state.documents.filter(x=>x.mission_id===id),quotes=currentQuotes(id),otherDocs=docs.filter(x=>x.document_type!=='caterer_quote'),date=dateOf(mission)
   $('tripDialogContent').innerHTML=`<button class="dialog-close" onclick="document.getElementById('tripDialog').close()">×</button><div class="dialog-hero"><p>${esc(match.competition||'DÉPLACEMENT')} · ${esc(match.round_label||'')}</p><h2>${esc(match.home_team||mission.destination_city)} <small>— OM</small></h2><span>${fmtDate(date)} · ${esc(match.venue_name||mission.destination_city||'Lieu à confirmer')}</span></div><div class="dialog-content">
   <section><p class="eyebrow">ÉQUIPE API</p><div class="dialog-team">${names.length?names.map(n=>{const p=TEAM.find(x=>x.name===n);return `<div><i style="background:${p?.color||'#168ac5'}">${initials(n)}</i><span><strong>${esc(n)}</strong><small>${esc(p?.role||'Équipe déplacement')}</small></span></div>`}).join(''):'<div class="empty-inline">Binôme à définir</div>'}</div></section>
   <section><p class="eyebrow">INFORMATIONS DE VOYAGE</p><div class="info-grid"><article><span>✈</span><small>Départ</small><strong>${legs.find(x=>x.direction==='outbound')?fmtDateTime(legs.find(x=>x.direction==='outbound').scheduled_departure):'Feuille de route attendue'}</strong></article><article><span>⌂</span><small>Hôtel</small><strong>${hotelName(docs)||'À confirmer'}</strong></article><article id="weatherCard"><span>☀</span><small>Météo</small><strong>Chargement…</strong></article></div></section>
-  <section><div class="section-title"><div><p class="eyebrow">DOCUMENTS</p><h3>Dossier du déplacement</h3></div></div><div class="document-list compact-docs">${docs.length?docs.map(documentCard).join(''):'<div class="empty-inline">Feuille de route, billets et hôtel seront ajoutés automatiquement à leur réception.</div>'}</div></section>
+  <section><div class="section-title"><div><p class="eyebrow">RESTAURATION</p><h3>Fiches prestataires</h3></div></div><div class="supplier-grid">${quotes.length?quotes.map(supplierCard).join(''):'<div class="empty-inline">Aucune offre reçue.</div>'}</div></section>
+  <section><div class="section-title"><div><p class="eyebrow">DOCUMENTS</p><h3>Dossier du déplacement</h3></div></div><div class="document-list compact-docs">${otherDocs.length?otherDocs.map(documentCard).join(''):'<div class="empty-inline">Feuille de route, billets et hôtel seront ajoutés automatiquement à leur réception.</div>'}</div></section>
   <section><p class="eyebrow">APPLICATIONS</p>${appCards(true)}</section></div>`
-  $('tripDialog').showModal();loadWeather(mission,date,'weatherCard')
+  $('tripDialog').showModal();$('tripDialogContent').querySelectorAll('[data-offer]').forEach(btn=>btn.onclick=()=>openOffer(btn.dataset.offer));loadWeather(mission,date,'weatherCard')
+}
+function offerHistory(doc){return state.documents.filter(x=>x.document_type==='caterer_quote'&&x.mission_id===doc.mission_id&&x.metadata?.document_status!=='request'&&supplierKey(x)===supplierKey(doc)).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))}
+function contactLink(value,type){if(!value)return '';const href=type==='mail'?`mailto:${value}`:`tel:${String(value).replace(/[^+\d]/g,'')}`;return `<a href="${esc(href)}">${esc(value)}</a>`}
+function openOffer(id){
+  const doc=state.documents.find(x=>x.id===id);if(!doc)return
+  const meta=doc.metadata||{},mission=missionOf(doc.mission_id),sections=offerSections(doc),history=offerHistory(doc),source=sourceInbox(doc)
+  const email=meta.supplier_contact_email||meta.supplier_email||source.sender_address||'',phone=meta.supplier_contact_phone||meta.supplier_phone||'',contact=meta.supplier_contact_name||source.sender_name||supplierName(doc)
+  const dietary=meta.dietary_summary||(/tripletta/i.test(supplierName(doc))?'Viandes halal, sans porc, sans alcool et sans gélatine animale. Production dédiée annoncée ; établissement non certifié halal.':'')
+  const venue=meta.venue||mission?.destination_city||'Lieu à confirmer'
+  $('offerDialogContent').innerHTML=`<button class="dialog-close" onclick="document.getElementById('offerDialog').close()">×</button>
+  <div class="offer-hero"><div><p>${esc(providerLabel(meta.supplier_type))} · ${esc(mission?.destination_city||'Déplacement')}</p><h2>${esc(supplierName(doc))}</h2><span>Fiche opérationnelle · mise à jour ${fmtDateTime(meta.summary_updated_at||doc.document_date||doc.created_at)}</span></div><b class="offer-status ${meta.is_current===false?'old':''}">${meta.is_current===false?'Ancienne version':'À jour'}</b></div>
+  <div class="offer-content">
+    <section class="offer-overview"><article><small>LIVRAISON</small><strong>${esc(deliverySummary(doc))}</strong></article><article><small>LIEU</small><strong>${esc(venue)}</strong></article><article><small>STATUT</small><strong>${meta.confirmation_required?'Quantités à confirmer':'Offre reçue'}</strong></article></section>
+    <section><div class="section-title"><div><p class="eyebrow">CONTENU DE L’OFFRE</p><h3>Produits et quantités</h3></div></div><div class="offer-sections">${sections.length?sections.map(section=>`<article><h4>${esc(section.title||'Contenu')}</h4><ul>${(section.items||[]).map(item=>`<li><span>${esc(item.name||item.label||'Élément')}${item.details?`<small>${esc(item.details)}</small>`:''}</span>${item.quantity!=null?`<b>${esc(item.quantity)}${item.unit?` ${esc(item.unit)}`:''}</b>`:''}</li>`).join('')}</ul></article>`).join(''):'<div class="empty-inline">Le détail est en cours d’extraction.</div>'}</div></section>
+    ${dietary?`<section class="offer-note"><span>✓</span><div><small>RÉGIMES & ALLERGÈNES</small><strong>${esc(dietary)}</strong></div></section>`:''}
+    <section><div class="section-title"><div><p class="eyebrow">CONTACT PRESTATAIRE</p><h3>${esc(contact)}</h3></div></div><div class="offer-contact">${email?`<div><span>✉</span><small>E-mail</small>${contactLink(email,'mail')}</div>`:''}${phone?`<div><span>☎</span><small>Téléphone</small>${contactLink(phone,'tel')}</div>`:''}${meta.onsite_contact_phone?`<div><span>◎</span><small>Sur place · ${esc(meta.onsite_contact_name||'Contact')}</small>${contactLink(meta.onsite_contact_phone,'tel')}</div>`:''}</div></section>
+    ${history.length>1?`<section><div class="section-title"><div><p class="eyebrow">HISTORIQUE</p><h3>${history.length} versions conservées</h3></div></div><div class="offer-history">${history.map(v=>`<button type="button" data-offer="${v.id}"><span>${esc(v.metadata?.revision?`Version ${v.metadata.revision}`:'Version reçue')}</span><small>${fmtDateTime(v.document_date||v.created_at)}</small><b>${v.metadata?.is_current===false?'Remplacée':'Actuelle'}</b></button>`).join('')}</div></section>`:''}
+    ${state.current.manager&&safeUrl(doc.source_url||'#')!=='#'?`<a class="source-mail-link" href="${safeUrl(doc.source_url)}" target="_blank" rel="noopener">Ouvrir l’e-mail source (gestionnaire) ↗</a>`:''}
+  </div>`
+  if(!$('offerDialog').open)$('offerDialog').showModal();$('offerDialogContent').querySelectorAll('[data-offer]').forEach(btn=>btn.onclick=()=>openOffer(btn.dataset.offer))
 }
 function hotelName(docs){const d=docs.find(x=>x.document_type==='hotel_confirmation'||x.document_type==='rooming');return d?.metadata?.hotel_name||d?.metadata?.hotel||null}
 async function loadWeather(mission,date,cardId='weatherCard'){

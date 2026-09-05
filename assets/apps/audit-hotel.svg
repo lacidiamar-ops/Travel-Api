@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="Audit Hôtel">
+  <rect width="96" height="96" rx="24" fill="#071b2f"/>
+  <path d="M22 74V35l26-16 26 16v39M34 74V43h28v31M42 51h12M42 60h12" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="74" cy="24" r="11" fill="#c7a455"/>
+  <path d="m69 24 4 4 7-8" fill="none" stroke="#071b2f" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
