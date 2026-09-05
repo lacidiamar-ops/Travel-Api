@@ -31,7 +31,6 @@ const fmtDate=value=>value?new Intl.DateTimeFormat('fr-FR',{weekday:'short',day:
 const fmtDateTime=value=>value?new Intl.DateTimeFormat('fr-FR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Paris'}).format(new Date(value)):'À confirmer'
 const daysUntil=value=>Math.ceil((new Date(value).setHours(0,0,0,0)-new Date().setHours(0,0,0,0))/86400000)
 const initials=name=>name.split(/\s+/).map(x=>x[0]).join('').slice(0,2).toUpperCase()
-const fmtMoney=value=>value==null?'Montant à confirmer':new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(Number(value))
 const isPrioritySource=item=>/l[ée]o\s+tagawa|stephane\s+saliu|st[ée]phane\s+saliu/i.test(`${item?.sender_name||''} ${item?.sender_address||''}`)
 const missionDocs=id=>state.documents.filter(x=>x.mission_id===id)
 const missionInbox=id=>state.inbox.filter(x=>x.matched_mission_id===id)
@@ -220,7 +219,7 @@ function documentCard(doc){
   const mission=missionOf(doc.mission_id),url=safeUrl(doc.source_url||'#')
   const quoteLabel=doc.metadata?.document_status==='request'?'Demande de devis':`Devis ${doc.metadata?.supplier_type||'traiteur'}`
   const labels={roadmap:'Feuille de route',flight_ticket:"Billet d'avion",train_ticket:'Billet de train',hotel_confirmation:'Hôtel',rooming:'Rooming',menu:'Menu',cdc:'Cahier des charges',audit:'Audit hôtel',invoice:'Facture',caterer_quote:quoteLabel,other:'Document'}
-  const icon=doc.document_type==='flight_ticket'?'✈':doc.document_type==='hotel_confirmation'?'⌂':doc.document_type==='caterer_quote'?'€':'▤'
+  const icon=doc.document_type==='flight_ticket'?'✈':doc.document_type==='hotel_confirmation'?'⌂':doc.document_type==='caterer_quote'?'🍽':'▤'
   if(doc.document_type==='caterer_quote'&&doc.metadata?.document_status!=='request')return supplierCard(doc)
   return `<a class="document-card" href="${url}" ${url!=='#'?'target="_blank" rel="noopener"':''}><span>${icon}</span><div><em>${esc(labels[doc.document_type]||'Document')}</em><strong>${esc(doc.file_name||labels[doc.document_type]||'Document')}</strong><small>${esc(mission?.destination_city||'Saison 2026-2027')} · ${fmtDate(doc.document_date||doc.created_at)}</small></div><b>${url==='#'?'À venir':'↗'}</b></a>`
 }
