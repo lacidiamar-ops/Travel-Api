@@ -144,7 +144,7 @@ function hotelForMission(id){
 function venueDetails(mission){
   const match=matchOf(mission),linked=locationOf(match.location_id),name=linked?.label||match.venue_name||mission?.destination_city||'Stade à confirmer'
   const address=linked?.address||match.metadata?.venue_address||''
-  return {name,address,checkedAt:match.source_checked_at||linked?.created_at||null}
+  return {name,address,checkedAt:match.metadata?.venue_address_checked_at||linked?.created_at||match.source_checked_at||null}
 }
 function hotelDetails(mission){
   const docs=missionDocs(mission.id),linked=locationOf(mission.primary_location_id)
