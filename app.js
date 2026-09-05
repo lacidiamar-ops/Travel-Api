@@ -19,13 +19,14 @@ const CONTACTS=[
   {name:'Stéphane Saliu',role:'Travel / organisation'}
 ]
 
-const state={sb:null,current:null,pin:'',selected:null,page:'home',missions:[],matches:[],assignments:[],legs:[],documents:[],apps:[],inbox:[],changes:[],members:[],refreshTimer:null}
+const state={sb:null,current:null,pin:'',selected:null,page:'home',missions:[],matches:[],assignments:[],legs:[],locations:[],documents:[],apps:[],inbox:[],changes:[],members:[],refreshTimer:null}
 const $=id=>document.getElementById(id)
 const esc=value=>String(value??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))
 const safeUrl=value=>{try{const u=new URL(value);return ['http:','https:'].includes(u.protocol)?u.href:'#'}catch{return '#'}}
 const dateOf=m=>state.matches.find(x=>x.id===m.match_id)?.kickoff_at||m.starts_at
 const matchOf=m=>state.matches.find(x=>x.id===m.match_id)||{}
 const missionOf=id=>state.missions.find(x=>x.id===id)
+const locationOf=id=>state.locations.find(x=>x.id===id)
 const isFuture=m=>!dateOf(m)||new Date(dateOf(m)).getTime()>=Date.now()-86400000
 const fmtDate=value=>value?new Intl.DateTimeFormat('fr-FR',{weekday:'short',day:'numeric',month:'short',year:'numeric',timeZone:'Europe/Paris'}).format(new Date(value)):'Date à confirmer'
 const fmtDateTime=value=>value?new Intl.DateTimeFormat('fr-FR',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Paris'}).format(new Date(value)):'À confirmer'
@@ -89,6 +90,7 @@ async function loadData(showLoading=true){
     matches:state.sb.from('travel_matches').select('*').eq('season','2026/27').order('kickoff_at'),
     assignments:state.sb.from('travel_assignments').select('*').order('employee_name'),
     legs:state.sb.from('travel_legs').select('*').order('leg_order'),
+    locations:state.sb.from('travel_locations').select('*').order('created_at',{ascending:false}),
     documents:state.sb.from('travel_documents').select('*').order('document_date',{ascending:false}),
     apps:state.sb.from('travel_app_links').select('*').eq('active',true).order('label'),
     members:state.sb.from('travel_team_members').select('*').eq('active',true).order('display_order'),
@@ -132,10 +134,32 @@ function tripCard(m){
 function nextAssignedMission(){return state.missions.filter(m=>isFuture(m)&&assignmentNames(m.id).includes(state.current.name)).sort((a,b)=>new Date(dateOf(a)||'2999')-new Date(dateOf(b)||'2999'))[0]}
 function sourceInbox(doc){return state.inbox.find(x=>x.id===doc?.inbox_id)||{}}
 function hotelForMission(id){
+  const mission=missionOf(id),linked=locationOf(mission?.primary_location_id)
+  if(linked?.label)return linked.label
   const docs=missionDocs(id),direct=hotelName(docs);if(direct)return direct
   const text=missionInbox(id).map(x=>`${x.subject||''} ${x.raw_text||''}`).join(' ')
   const known=text.match(/(?:Novotel Rennes Alma|Marriott[^,.;\n]*|Mercure[^,.;\n]*|Pullman[^,.;\n]*|Novotel[^,.;\n]*)/i)
   return known?.[0]||'Hôtel à confirmer'
+}
+function venueDetails(mission){
+  const match=matchOf(mission),linked=locationOf(match.location_id),name=linked?.label||match.venue_name||mission?.destination_city||'Stade à confirmer'
+  const address=linked?.address||match.metadata?.venue_address||''
+  return {name,address,checkedAt:match.source_checked_at||linked?.created_at||null}
+}
+function hotelDetails(mission){
+  const docs=missionDocs(mission.id),linked=locationOf(mission.primary_location_id)
+  const hotelDoc=docs.find(x=>x.document_type==='hotel_confirmation'||x.document_type==='rooming')
+  const metadata=hotelDoc?.metadata||{}
+  return {
+    name:linked?.label||metadata.hotel_name||metadata.hotel||hotelForMission(mission.id),
+    address:linked?.address||metadata.hotel_address||metadata.address||'',
+    checkedAt:metadata.address_checked_at||metadata.summary_updated_at||hotelDoc?.document_date||linked?.created_at||null
+  }
+}
+function mapUrl(place){return place?.address?`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${place.name} ${place.address}`)}`:'#'}
+function addressHtml(place,label='Voir l’itinéraire'){
+  if(!place?.address)return '<small class="key-detail">Adresse en attente de confirmation</small>'
+  return `<address class="place-address">${esc(place.address)}</address><a class="map-link" href="${safeUrl(mapUrl(place))}" target="_blank" rel="noopener">${esc(label)} ↗</a>${place.checkedAt?`<small class="address-freshness">Actualisé ${fmtDateTime(place.checkedAt)}</small>`:''}`
 }
 function currentQuotes(id){return missionDocs(id).filter(x=>x.document_type==='caterer_quote'&&x.metadata?.is_current!==false&&x.metadata?.document_status!=='request').sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))}
 function supplierName(doc){const meta=doc?.metadata||{},source=sourceInbox(doc);return meta.supplier||meta.supplier_name||source.sender_name||'Prestataire'}
@@ -177,13 +201,14 @@ function travelUpdateCard(item){
 function homePage(){
   const next=nextAssignedMission(),match=next?matchOf(next):{},names=next?assignmentNames(next.id):[],date=next?dateOf(next):null
   const alerts=state.current.manager?state.changes.length:0
-  const docs=next?missionDocs(next.id):[],legs=next?state.legs.filter(x=>x.mission_id===next.id):[],outbound=legs.find(x=>x.direction==='outbound'),roadmap=docs.find(x=>x.document_type==='roadmap'),quotes=next?currentQuotes(next.id):[],latest=next?priorityUpdate(next.id):null,news=freshItems()
+  const docs=next?missionDocs(next.id):[],legs=next?state.legs.filter(x=>x.mission_id===next.id):[],outbound=legs.find(x=>x.direction==='outbound'),roadmap=docs.find(x=>x.document_type==='roadmap'),quotes=next?currentQuotes(next.id):[],latest=next?priorityUpdate(next.id):null,news=freshItems(),venue=next?venueDetails(next):null,hotel=next?hotelDetails(next):null
   return `<div class="welcome"><div><span class="eyebrow">BONJOUR ${esc(state.current.first.toUpperCase())}</span><h2>Votre briefing déplacement</h2><p>Les informations importantes, mises à jour automatiquement.</p></div><div class="live-chip"><i></i> En direct</div></div>
   ${news.length?`<div class="news-banner"><span>●</span><div><strong>${news.length} nouveauté${news.length>1?'s':''} depuis votre dernière consultation</strong><small>${esc(news[0].label)}</small></div><button type="button" data-mark-seen>Marquer comme vu</button></div>`:''}
-  ${next?`<article class="next-trip"><div class="next-trip-head"><span>${esc(match.competition||'PROCHAIN DÉPLACEMENT')}</span><b>${date&&daysUntil(date)>=0?`J-${daysUntil(date)}`:'À venir'}</b></div><div class="next-trip-body"><div><p>${fmtDate(date)}</p><h2>${esc(match.home_team||next.destination_city)} <small>— OM</small></h2><span>${esc(match.venue_name||next.destination_city||'Lieu à confirmer')}</span></div><div class="team-bubbles">${names.map(n=>`<i title="${esc(n)}">${initials(n)}</i>`).join('')}</div></div><div class="next-trip-foot"><div><span>Préparation</span><strong>${next.completeness_score}%</strong><i><u style="width:${next.completeness_score}%"></u></i></div><button data-mission="${next.id}">Ouvrir le dossier →</button></div></article>`:'<article class="empty-card">Aucun déplacement affecté pour le moment.</article>'}
+  ${next?`<article class="next-trip"><div class="next-trip-head"><span>${esc(match.competition||'PROCHAIN DÉPLACEMENT')}</span><b>${date&&daysUntil(date)>=0?`J-${daysUntil(date)}`:'À venir'}</b></div><div class="next-trip-body"><div><p>${fmtDate(date)}</p><h2>${esc(match.home_team||next.destination_city)} <small>— OM</small></h2><span>${esc(venue.name)}${venue.address?` · ${esc(venue.address)}`:''}</span></div><div class="team-bubbles">${names.map(n=>`<i title="${esc(n)}">${initials(n)}</i>`).join('')}</div></div><div class="next-trip-foot"><div><span>Préparation</span><strong>${next.completeness_score}%</strong><i><u style="width:${next.completeness_score}%"></u></i></div><button data-mission="${next.id}">Ouvrir le dossier →</button></div></article>`:'<article class="empty-card">Aucun déplacement affecté pour le moment.</article>'}
   ${next?`<div class="boarding-grid">
     <section class="dashboard-panel span-2"><div class="panel-head"><div><p class="eyebrow">DERNIÈRE INFORMATION TRAVEL</p><h3>Léo Tagawa & Stéphane Saliu</h3></div><span class="live-dot">● Synchronisé</span></div>${travelUpdateCard(latest)}</section>
-    <section class="dashboard-panel"><div class="panel-head"><div><p class="eyebrow">HÔTEL</p><h3>${esc(next.destination_city||'Déplacement')}</h3></div><span class="panel-icon">⌂</span></div><strong class="key-value">${esc(hotelForMission(next.id))}</strong><small class="key-detail">${docs.some(x=>x.document_type==='hotel_confirmation'||x.document_type==='rooming')?'Confirmation disponible':'Informations issues du dernier mail Travel'}</small></section>
+    <section class="dashboard-panel place-panel"><div class="panel-head"><div><p class="eyebrow">HÔTEL</p><h3>${esc(next.destination_city||'Déplacement')}</h3></div><span class="panel-icon">⌂</span></div><strong class="key-value">${esc(hotel.name)}</strong>${addressHtml(hotel)}</section>
+    <section class="dashboard-panel place-panel"><div class="panel-head"><div><p class="eyebrow">STADE</p><h3>${esc(next.destination_city||'Déplacement')}</h3></div><span class="panel-icon">⌖</span></div><strong class="key-value">${esc(venue.name)}</strong>${addressHtml(venue)}</section>
     <section id="homeWeatherCard" class="dashboard-panel weather-panel"><div class="panel-head"><div><p class="eyebrow">MÉTÉO</p><h3>${esc(next.destination_city||'Destination')}</h3></div><span class="panel-icon">☀</span></div><strong class="key-value">Chargement…</strong></section>
     <section class="dashboard-panel"><div class="panel-head"><div><p class="eyebrow">TRANSPORT</p><h3>Départ</h3></div><span class="panel-icon">✈</span></div><strong class="key-value">${outbound?fmtDateTime(outbound.scheduled_departure):'Horaire attendu'}</strong><small class="key-detail">${roadmap?`Feuille de route disponible`:'Synchronisation du mail Travel active'}</small></section>
     <section class="dashboard-panel span-2"><div class="panel-head"><div><p class="eyebrow">RESTAURATION EXTÉRIEURE</p><h3>Fiches prestataires</h3></div><button class="text-btn" data-page="documents">Toutes les fiches</button></div>${quoteList(quotes)}</section>
@@ -230,10 +255,10 @@ function inboxPage(){
 }
 function openMission(id){
   const mission=missionOf(id);if(!mission)return
-  const match=matchOf(mission),names=assignmentNames(id),legs=state.legs.filter(x=>x.mission_id===id),docs=state.documents.filter(x=>x.mission_id===id),quotes=currentQuotes(id),otherDocs=docs.filter(x=>x.document_type!=='caterer_quote'),date=dateOf(mission)
-  $('tripDialogContent').innerHTML=`<button class="dialog-close" onclick="document.getElementById('tripDialog').close()">×</button><div class="dialog-hero"><p>${esc(match.competition||'DÉPLACEMENT')} · ${esc(match.round_label||'')}</p><h2>${esc(match.home_team||mission.destination_city)} <small>— OM</small></h2><span>${fmtDate(date)} · ${esc(match.venue_name||mission.destination_city||'Lieu à confirmer')}</span></div><div class="dialog-content">
+  const match=matchOf(mission),names=assignmentNames(id),legs=state.legs.filter(x=>x.mission_id===id),docs=state.documents.filter(x=>x.mission_id===id),quotes=currentQuotes(id),otherDocs=docs.filter(x=>x.document_type!=='caterer_quote'),date=dateOf(mission),venue=venueDetails(mission),hotel=hotelDetails(mission)
+  $('tripDialogContent').innerHTML=`<button class="dialog-close" onclick="document.getElementById('tripDialog').close()">×</button><div class="dialog-hero"><p>${esc(match.competition||'DÉPLACEMENT')} · ${esc(match.round_label||'')}</p><h2>${esc(match.home_team||mission.destination_city)} <small>— OM</small></h2><span>${fmtDate(date)} · ${esc(venue.name)}</span></div><div class="dialog-content">
   <section><p class="eyebrow">ÉQUIPE API</p><div class="dialog-team">${names.length?names.map(n=>{const p=TEAM.find(x=>x.name===n);return `<div><i style="background:${p?.color||'#168ac5'}">${initials(n)}</i><span><strong>${esc(n)}</strong><small>${esc(p?.role||'Équipe déplacement')}</small></span></div>`}).join(''):'<div class="empty-inline">Binôme à définir</div>'}</div></section>
-  <section><p class="eyebrow">INFORMATIONS DE VOYAGE</p><div class="info-grid"><article><span>✈</span><small>Départ</small><strong>${legs.find(x=>x.direction==='outbound')?fmtDateTime(legs.find(x=>x.direction==='outbound').scheduled_departure):'Feuille de route attendue'}</strong></article><article><span>⌂</span><small>Hôtel</small><strong>${hotelName(docs)||'À confirmer'}</strong></article><article id="weatherCard"><span>☀</span><small>Météo</small><strong>Chargement…</strong></article></div></section>
+  <section><p class="eyebrow">INFORMATIONS DE VOYAGE</p><div class="info-grid"><article><span>✈</span><small>Départ</small><strong>${legs.find(x=>x.direction==='outbound')?fmtDateTime(legs.find(x=>x.direction==='outbound').scheduled_departure):'Feuille de route attendue'}</strong></article><article class="place-card"><span>⌂</span><small>Hôtel</small><strong>${esc(hotel.name)}</strong>${addressHtml(hotel)}</article><article class="place-card"><span>⌖</span><small>Stade</small><strong>${esc(venue.name)}</strong>${addressHtml(venue)}</article><article id="weatherCard"><span>☀</span><small>Météo</small><strong>Chargement…</strong></article></div></section>
   <section><div class="section-title"><div><p class="eyebrow">RESTAURATION</p><h3>Fiches prestataires</h3></div></div><div class="supplier-grid">${quotes.length?quotes.map(supplierCard).join(''):'<div class="empty-inline">Aucune offre reçue.</div>'}</div></section>
   <section><div class="section-title"><div><p class="eyebrow">DOCUMENTS</p><h3>Dossier du déplacement</h3></div></div><div class="document-list compact-docs">${otherDocs.length?otherDocs.map(documentCard).join(''):'<div class="empty-inline">Feuille de route, billets et hôtel seront ajoutés automatiquement à leur réception.</div>'}</div></section>
   <section><p class="eyebrow">APPLICATIONS</p>${appCards(true)}</section></div>`
