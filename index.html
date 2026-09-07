@@ -27,7 +27,7 @@
       <div id="profileStep">
         <p class="eyebrow">ACCÈS ÉQUIPE</p>
         <h1>Qui êtes-vous&nbsp;?</h1>
-        <p class="lead">Sélectionnez votre profil pour retrouver uniquement les déplacements qui vous concernent.</p>
+        <p class="lead">Sélectionnez votre profil pour retrouver le briefing commun de l’équipe et vos billets personnels.</p>
         <div id="profileGrid" class="profile-grid"></div>
       </div>
       <div id="pinStep" class="hidden">
@@ -39,7 +39,7 @@
         <div id="pinError" class="pin-error" role="alert"></div>
         <div id="keypad" class="keypad"></div>
       </div>
-      <div class="secure-note"><span>●</span> Accès personnel sécurisé · données filtrées par utilisateur</div>
+      <div class="secure-note"><span>●</span> Briefing équipe partagé · billets d’avion personnels</div>
     </div>
   </section>
 
@@ -75,6 +75,7 @@
 
   <dialog id="tripDialog" class="trip-dialog"><div id="tripDialogContent"></div></dialog>
   <dialog id="offerDialog" class="trip-dialog offer-dialog"><div id="offerDialogContent"></div></dialog>
+  <dialog id="documentDialog" class="trip-dialog document-dialog"><div id="documentDialogContent"></div></dialog>
   <div id="toast" class="toast" role="status"></div>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
   <script src="app.js"></script>
