@@ -291,8 +291,8 @@ function roadmapDetails(doc){
     ${detailRow('Contact',[contact.name,contact.email,contact.phone].filter(Boolean).join(' · '))}
   </div></section>`
 }
-function showDocumentDialog(title,subtitle,status,body,sourceUrl){
-  $('documentDialogContent').innerHTML=`<button class="dialog-close" onclick="document.getElementById('documentDialog').close()">×</button><div class="document-hero"><div><p>${esc(subtitle)}</p><h2>${esc(title)}</h2><span>${esc(status)}</span></div></div><div class="document-content">${body}${state.current.manager&&safeUrl(sourceUrl||'#')!=='#'?`<a class="source-mail-link" href="${safeUrl(sourceUrl)}" target="_blank" rel="noopener">Voir la source Gmail (gestionnaire) ↗</a>`:''}</div>`
+function showDocumentDialog(title,subtitle,status,body){
+  $('documentDialogContent').innerHTML=`<button class="dialog-close" onclick="document.getElementById('documentDialog').close()">×</button><div class="document-hero"><div><p>${esc(subtitle)}</p><h2>${esc(title)}</h2><span>${esc(status)}</span></div></div><div class="document-content">${body}</div>`
   if(!$('documentDialog').open)$('documentDialog').showModal()
   $('documentDialogContent').querySelectorAll('[data-document]').forEach(btn=>btn.onclick=()=>openDocument(btn.dataset.document))
 }
@@ -301,14 +301,14 @@ function openDocument(id){
   const mission=missionOf(doc.mission_id),source=sourceInbox(doc),text=doc.extracted_text||source.raw_text||'Aucune retranscription disponible pour le moment.'
   const personal=doc.document_type==='flight_ticket'
   const body=`${roadmapDetails(doc)}<section><div class="section-title"><div><p class="eyebrow">RETRANSCRIPTION COMPLÈTE</p><h3>Contenu du document</h3></div></div><div class="document-transcript">${esc(text)}</div></section>`
-  showDocumentDialog(doc.file_name||documentLabel(doc.document_type),`${documentLabel(doc.document_type)} · ${mission?.destination_city||'Déplacement'}`,personal?'Document personnel — visible uniquement sur votre profil':'Fiche commune à toute l’équipe',body,doc.source_url)
+  showDocumentDialog(doc.file_name||documentLabel(doc.document_type),`${documentLabel(doc.document_type)} · ${mission?.destination_city||'Déplacement'}`,personal?'Document personnel — visible uniquement sur votre profil':'Fiche commune à toute l’équipe',body)
 }
 function openInboxItem(id){
   const item=state.inbox.find(x=>x.id===id);if(!item)return
   const mission=missionOf(item.matched_mission_id),related=visibleDocuments().filter(x=>x.inbox_id===item.id)
   const relatedHtml=related.length?`<section><div class="section-title"><div><p class="eyebrow">PIÈCES JOINTES TRAITÉES</p><h3>Fiches disponibles</h3></div></div><div class="document-list">${related.map(documentCard).join('')}</div></section>`:''
   const body=`<section><div class="document-facts">${detailRow('Expéditeur',item.sender_name||item.sender_address)}${detailRow('Reçu le',fmtDateTime(item.received_at))}${detailRow('Statut',item.status==='needs_review'?'À vérifier':item.status==='applied'?'Intégré':'Nouveau')}</div></section><section><div class="section-title"><div><p class="eyebrow">RETRANSCRIPTION COMPLÈTE</p><h3>Contenu du message</h3></div></div><div class="document-transcript">${esc(item.raw_text||'Aucun texte extrait.')}</div></section>${relatedHtml}`
-  showDocumentDialog(item.subject||'Information Travel',`Mail Travel · ${mission?.destination_city||'Déplacement'}`,'Fiche commune à toute l’équipe',body,item.raw_payload?.permalink||item.raw_payload?.source_url)
+  showDocumentDialog(item.subject||'Information Travel',`Mail Travel · ${mission?.destination_city||'Déplacement'}`,'Fiche commune à toute l’équipe',body)
 }
 function appsPage(){return `<div class="page-intro"><h2>Tout le nécessaire sur le terrain</h2><p>Chaque outil s’ouvre dans son application dédiée, avec ses propres droits d’accès.</p></div>${appCards()}<div class="contact-panel"><div class="section-title"><div><p class="eyebrow">SOURCES VOYAGE</p><h3>Informations synchronisées</h3></div></div>${CONTACTS.map(c=>`<div class="contact-row"><span>${initials(c.name)}</span><div><strong>${c.name}</strong><small>${c.role}</small></div><b>Synchronisé</b></div>`).join('')}</div>`}
 function inboxPage(){
@@ -342,7 +342,6 @@ function openOffer(id){
     ${dietary?`<section class="offer-note"><span>✓</span><div><small>RÉGIMES & ALLERGÈNES</small><strong>${esc(dietary)}</strong></div></section>`:''}
     <section><div class="section-title"><div><p class="eyebrow">CONTACT PRESTATAIRE</p><h3>${esc(contact)}</h3></div></div><div class="offer-contact">${email?`<div><span>✉</span><small>E-mail</small>${contactLink(email,'mail')}</div>`:''}${phone?`<div><span>☎</span><small>Téléphone</small>${contactLink(phone,'tel')}</div>`:''}${meta.onsite_contact_phone?`<div><span>◎</span><small>Sur place · ${esc(meta.onsite_contact_name||'Contact')}</small>${contactLink(meta.onsite_contact_phone,'tel')}</div>`:''}</div></section>
     ${history.length>1?`<section><div class="section-title"><div><p class="eyebrow">HISTORIQUE</p><h3>${history.length} versions conservées</h3></div></div><div class="offer-history">${history.map(v=>`<button type="button" data-offer="${v.id}"><span>${esc(v.metadata?.revision?`Version ${v.metadata.revision}`:'Version reçue')}</span><small>${fmtDateTime(v.document_date||v.created_at)}</small><b>${v.metadata?.is_current===false?'Remplacée':'Actuelle'}</b></button>`).join('')}</div></section>`:''}
-    ${state.current.manager&&safeUrl(doc.source_url||'#')!=='#'?`<a class="source-mail-link" href="${safeUrl(doc.source_url)}" target="_blank" rel="noopener">Ouvrir l’e-mail source (gestionnaire) ↗</a>`:''}
   </div>`
   if(!$('offerDialog').open)$('offerDialog').showModal();$('offerDialogContent').querySelectorAll('[data-offer]').forEach(btn=>btn.onclick=()=>openOffer(btn.dataset.offer))
 }
