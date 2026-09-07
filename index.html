@@ -57,10 +57,12 @@
     </aside>
 
     <main class="main">
-      <header class="topbar">
-        <div class="topbar-title"><img class="topbar-logo" src="assets/travel-app-icon-192.png" alt=""><div><p id="pageEyebrow" class="eyebrow">ESPACE PERSONNEL</p><h1 id="pageTitle">Accueil</h1></div></div>
-        <div class="user-box"><button id="notificationBtn" class="notification-btn" type="button" title="Nouveautés" aria-label="Afficher les nouveautés"><span>●</span><b id="notificationCount">0</b></button><div id="topAvatar" class="avatar">AL</div><div><strong id="topName">Amar</strong><small id="topRole"></small></div><button id="logoutBtn" title="Déconnexion">↪</button></div>
-      </header>
+      <div class="account-dock" aria-label="Commandes du compte">
+        <button id="notificationBtn" class="notification-btn" type="button" title="Nouveautés" aria-label="Afficher les nouveautés"><span>●</span><b id="notificationCount">0</b></button>
+        <div id="topAvatar" class="avatar">AL</div>
+        <div class="account-copy"><strong id="topName">Amar</strong><small id="topRole"></small></div>
+        <button id="logoutBtn" class="logout-btn" title="Déconnexion" aria-label="Se déconnecter">↪</button>
+      </div>
       <section id="pageContent" class="page-content"><div class="loading-card">Chargement de vos déplacements…</div></section>
     </main>
 
@@ -78,6 +80,6 @@
   <dialog id="documentDialog" class="trip-dialog document-dialog"><div id="documentDialogContent"></div></dialog>
   <div id="toast" class="toast" role="status"></div>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.min.js"></script>
-  <script src="app.js?v=20260907-4"></script>
+  <script src="app.js?v=20260907-5"></script>
 </body>
 </html>
