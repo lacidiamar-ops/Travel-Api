@@ -19,7 +19,17 @@ const CONTACTS=[
   {name:'Stéphane Saliu',role:'Travel / organisation'}
 ]
 
-const state={sb:null,current:null,pin:'',selected:null,page:'home',missions:[],matches:[],assignments:[],legs:[],locations:[],documents:[],apps:[],inbox:[],changes:[],members:[],refreshTimer:null}
+const CLUB_WIKI_TITLES={
+  'Monaco':'Association sportive de Monaco Football Club','Rennes':'Stade rennais Football Club','Beşiktaş':'Beşiktaş Jimnastik Kulübü',
+  'Troyes':'Espérance sportive Troyes Aube Champagne','Angers':"Angers Sporting Club de l'Ouest",'Sturm Graz':'SK Sturm Graz',
+  'Leverkusen':'Bayer 04 Leverkusen','Lens':'Racing Club de Lens','Auxerre':'Association de la jeunesse auxerroise',
+  'Lyon':'Olympique lyonnais','Brest':'Stade brestois 29','Celtic':'Celtic Football Club','Lorient':'Football Club de Lorient',
+  'Paris Saint-Germain':'Paris Saint-Germain Football Club','Strasbourg':'Racing Club de Strasbourg Alsace','Lille':'LOSC Lille',
+  'Le Mans':'Le Mans Football Club','Le Havre':'Le Havre Athletic Club (football)','Toulouse':'Toulouse Football Club',
+  'Nice':'Olympique Gymnaste Club de Nice','Paris FC':'Paris Football Club'
+}
+
+const state={sb:null,current:null,pin:'',selected:null,page:'home',missions:[],matches:[],assignments:[],legs:[],locations:[],documents:[],apps:[],inbox:[],changes:[],members:[],wikiImages:{},refreshTimer:null}
 const $=id=>document.getElementById(id)
 const esc=value=>String(value??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))
 const safeUrl=value=>{try{const u=new URL(value);return ['http:','https:'].includes(u.protocol)?u.href:'#'}catch{return '#'}}
@@ -35,6 +45,42 @@ const initials=name=>name.split(/\s+/).map(x=>x[0]).join('').slice(0,2).toUpperC
 const isPrioritySource=item=>/l[ée]o\s+tagawa|stephane\s+saliu|st[ée]phane\s+saliu/i.test(`${item?.sender_name||''} ${item?.sender_address||''}`)
 const currentMember=()=>state.members.find(x=>x.auth_uid===state.current?.id)
 const currentEmployeeId=()=>currentMember()?.assignment_employee_id||null
+function missionVisuals(mission){
+  const match=matchOf(mission),meta=match.metadata||{}
+  return {
+    clubName:match.home_team||mission.destination_city||'',
+    clubTitle:meta.club_wikipedia_title||CLUB_WIKI_TITLES[match.home_team]||match.home_team||'',
+    clubLogoUrl:meta.club_logo_url||'',
+    cityTitle:meta.city_wikipedia_title||mission.destination_city||match.city||'',
+    cityPhotoUrl:meta.city_photo_url||'',
+    cityPhotoCredit:meta.city_photo_credit||'Wikimedia Commons'
+  }
+}
+function visualImage({url='',title='',alt='',kind=''}){
+  const direct=safeUrl(url)
+  if(direct!=='#')return `<img class="travel-visual ${esc(kind)} loaded" src="${direct}" alt="${esc(alt)}" loading="lazy" referrerpolicy="no-referrer">`
+  if(!title)return ''
+  const cached=state.wikiImages[title]
+  return `<img class="travel-visual ${esc(kind)}${cached?' loaded':''}" ${cached?`src="${esc(cached)}"`:`data-wiki-title="${esc(title)}"`} alt="${esc(alt)}" loading="lazy" referrerpolicy="no-referrer">`
+}
+async function hydrateVisuals(root=document){
+  const pending=[...root.querySelectorAll('img[data-wiki-title]')]
+  if(!pending.length)return
+  const titles=[...new Set(pending.map(img=>img.dataset.wikiTitle).filter(Boolean))]
+  try{
+    const url=`https://fr.wikipedia.org/w/api.php?action=query&prop=pageimages&piprop=thumbnail&pithumbsize=1000&redirects=1&origin=*&format=json&titles=${encodeURIComponent(titles.join('|'))}`
+    const data=await fetch(url).then(response=>response.ok?response.json():Promise.reject())
+    const aliases={};(data.query?.normalized||[]).forEach(item=>aliases[item.from]=item.to);(data.query?.redirects||[]).forEach(item=>aliases[item.from]=item.to)
+    Object.values(data.query?.pages||{}).forEach(page=>{if(page.title&&page.thumbnail?.source)state.wikiImages[page.title]=page.thumbnail.source})
+    pending.forEach(img=>{
+      const requested=img.dataset.wikiTitle
+      let resolved=requested;for(let i=0;i<3&&aliases[resolved];i++)resolved=aliases[resolved]
+      const source=state.wikiImages[requested]||state.wikiImages[resolved]||Object.entries(state.wikiImages).find(([key])=>key.toLowerCase()===resolved.toLowerCase())?.[1]
+      if(source)state.wikiImages[requested]=source
+      if(source){img.src=source;img.classList.add('loaded');delete img.dataset.wikiTitle}else img.remove()
+    })
+  }catch{pending.forEach(img=>img.remove())}
+}
 function canViewDocument(doc){
   if(doc?.document_type!=='flight_ticket'||state.current?.manager)return true
   const meta=doc.metadata||{},ownerId=doc.employee_id||meta.employee_id||meta.assigned_employee_id
@@ -119,7 +165,7 @@ function go(page){
   const meta={home:['ESPACE PERSONNEL','Accueil'],trips:['SAISON 2026-2027','Déplacements'],documents:['DOSSIER DE VOYAGE','Documents'],apps:['ACCÈS RAPIDES','Applications'],inbox:['SYNCHRONISATION MAIL','Travel Inbox']}
   $('pageEyebrow').textContent=meta[page][0];$('pageTitle').textContent=meta[page][1]
   const pages={home:homePage,trips:tripsPage,documents:documentsPage,apps:appsPage,inbox:inboxPage}
-  $('pageContent').innerHTML=pages[page]();bindPage();window.scrollTo({top:0,behavior:'smooth'})
+  $('pageContent').innerHTML=pages[page]();bindPage();hydrateVisuals($('pageContent'));window.scrollTo({top:0,behavior:'smooth'})
   if(page==='home'){const mission=nextTeamMission();if(mission)loadWeather(mission,dateOf(mission),'homeWeatherCard')}
 }
 function bindPage(){
@@ -139,9 +185,9 @@ function appCatalog(){
 function appCards(compact=false){return `<div class="app-grid ${compact?'compact':''}">${appCatalog().map(a=>{const url=safeUrl(a.url);return `<a class="app-card ${url==='#'?'disabled':''}" href="${url}" ${url!=='#'?'target="_blank" rel="noopener"':''}><span class="app-icon"><img src="${esc(a.logo||'assets/apps/application.svg')}" alt=""></span><div><strong>${esc(a.label)}</strong><small>${esc(a.description||'Ouvrir l’application')}</small></div><b>${url==='#'?'—':'↗'}</b></a>`}).join('')}</div>`}
 function assignmentNames(missionId){return state.assignments.filter(a=>a.mission_id===missionId).map(a=>a.employee_name)}
 function tripCard(m){
-  const match=matchOf(m),date=dateOf(m),d=date?daysUntil(date):null,names=assignmentNames(m.id)
+  const match=matchOf(m),date=dateOf(m),d=date?daysUntil(date):null,names=assignmentNames(m.id),visuals=missionVisuals(m)
   const badge=d===null?'À confirmer':d<0?'Passé':d===0?'Aujourd’hui':`J-${d}`
-  return `<button class="trip-card" data-mission="${m.id}"><span class="trip-date"><strong>${date?new Date(date).toLocaleDateString('fr-FR',{day:'2-digit',timeZone:'Europe/Paris'}):'--'}</strong><small>${date?new Date(date).toLocaleDateString('fr-FR',{month:'short',timeZone:'Europe/Paris'}):''}</small></span><span class="trip-main"><span class="trip-top"><em>${esc(match.competition||'Déplacement')}</em><i>${esc(badge)}</i></span><strong>${esc(match.home_team||m.destination_city||m.title)}</strong><small>${esc(m.destination_city||match.city||'Lieu à confirmer')} · ${names.length?esc(names.join(' + ')):'Équipe à définir'}</small></span><span class="trip-progress"><b>${m.completeness_score}%</b><i><u style="width:${m.completeness_score}%"></u></i></span><span class="arrow">›</span></button>`
+  return `<button class="trip-card" data-mission="${m.id}"><span class="trip-thumb">${visualImage({url:visuals.cityPhotoUrl,title:visuals.cityTitle,alt:`Vue de ${m.destination_city}`,kind:'city-photo'})}<i>${visualImage({url:visuals.clubLogoUrl,title:visuals.clubTitle,alt:`Logo ${visuals.clubName}`,kind:'club-logo'})}</i><b>${date?new Date(date).toLocaleDateString('fr-FR',{day:'2-digit',timeZone:'Europe/Paris'}):'--'}<small>${date?new Date(date).toLocaleDateString('fr-FR',{month:'short',timeZone:'Europe/Paris'}):''}</small></b></span><span class="trip-main"><span class="trip-top"><em>${esc(match.competition||'Déplacement')}</em><i>${esc(badge)}</i></span><strong>${esc(match.home_team||m.destination_city||m.title)}</strong><small>${esc(m.destination_city||match.city||'Lieu à confirmer')} · ${names.length?esc(names.join(' + ')):'Équipe à définir'}</small></span><span class="trip-progress"><b>${m.completeness_score}%</b><i><u style="width:${m.completeness_score}%"></u></i></span><span class="arrow">›</span></button>`
 }
 function nextTeamMission(){return state.missions.filter(isFuture).sort((a,b)=>new Date(dateOf(a)||'2999')-new Date(dateOf(b)||'2999'))[0]}
 function isAssignedToCurrent(missionId){return assignmentNames(missionId).includes(state.current.name)}
@@ -160,14 +206,21 @@ function venueDetails(mission){
   return {name,address,checkedAt:match.metadata?.venue_address_checked_at||linked?.created_at||match.source_checked_at||null}
 }
 function hotelDetails(mission){
-  const docs=missionDocs(mission.id),linked=locationOf(mission.primary_location_id)
+  const docs=missionDocs(mission.id),linked=locationOf(mission.primary_location_id),matchMeta=matchOf(mission).metadata||{}
   const hotelDoc=docs.find(x=>x.document_type==='hotel_confirmation'||x.document_type==='rooming')
   const metadata=hotelDoc?.metadata||{}
   return {
     name:linked?.label||metadata.hotel_name||metadata.hotel||hotelForMission(mission.id),
     address:linked?.address||metadata.hotel_address||metadata.address||'',
+    photoUrl:matchMeta.hotel_photo_url||metadata.hotel_photo_url||'',
+    wikipediaTitle:matchMeta.hotel_wikipedia_title||metadata.hotel_wikipedia_title||'',
+    photoCredit:matchMeta.hotel_photo_credit||metadata.hotel_photo_credit||'',
     checkedAt:metadata.address_checked_at||metadata.summary_updated_at||hotelDoc?.document_date||linked?.created_at||null
   }
+}
+function placeVisual(kind,place,title){
+  if(!place?.photoUrl&&!place?.wikipediaTitle)return ''
+  return `<div class="place-visual">${visualImage({url:place.photoUrl,title:place.wikipediaTitle,alt:`${kind} — ${place.name}`,kind:`${kind}-photo`})}<span>${esc(title)}</span></div>`
 }
 function mapUrl(place){return place?.address?`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${place.name} ${place.address}`)}`:'#'}
 function addressHtml(place,label='Voir l’itinéraire'){
@@ -222,13 +275,13 @@ function roadmapJourney(roadmap){
 function homePage(){
   const next=nextTeamMission(),match=next?matchOf(next):{},names=next?assignmentNames(next.id):[],date=next?dateOf(next):null
   const alerts=state.current.manager?state.changes.length:0
-  const docs=next?missionDocs(next.id):[],legs=next?state.legs.filter(x=>x.mission_id===next.id):[],outbound=legs.find(x=>x.direction==='outbound'),roadmap=docs.find(x=>x.document_type==='roadmap'),journey=roadmapJourney(roadmap),quotes=next?currentQuotes(next.id):[],latest=next?priorityUpdate(next.id):null,news=freshItems(),venue=next?venueDetails(next):null,hotel=next?hotelDetails(next):null,assigned=next?isAssignedToCurrent(next.id):false
+  const docs=next?missionDocs(next.id):[],legs=next?state.legs.filter(x=>x.mission_id===next.id):[],outbound=legs.find(x=>x.direction==='outbound'),roadmap=docs.find(x=>x.document_type==='roadmap'),journey=roadmapJourney(roadmap),quotes=next?currentQuotes(next.id):[],latest=next?priorityUpdate(next.id):null,news=freshItems(),venue=next?venueDetails(next):null,hotel=next?hotelDetails(next):null,assigned=next?isAssignedToCurrent(next.id):false,visuals=next?missionVisuals(next):{}
   return `<div class="welcome"><div><span class="eyebrow">BONJOUR ${esc(state.current.first.toUpperCase())}</span><h2>Votre briefing déplacement</h2><p>Les informations importantes, mises à jour automatiquement.</p></div><div class="live-chip"><i></i> En direct</div></div>
   ${news.length?`<div class="news-banner"><span>●</span><div><strong>${news.length} nouveauté${news.length>1?'s':''} depuis votre dernière consultation</strong><small>${esc(news[0].label)}</small></div><button type="button" data-mark-seen>Marquer comme vu</button></div>`:''}
-  ${next?`<article class="next-trip"><div class="next-trip-head"><span>${esc(match.competition||'PROCHAIN DÉPLACEMENT')} · ${assigned?'VOUS PARTEZ':'INFORMATION ÉQUIPE'}</span><b>${date&&daysUntil(date)>=0?`J-${daysUntil(date)}`:'À venir'}</b></div><div class="next-trip-body"><div><p>${fmtDate(date)}</p><h2>${esc(match.home_team||next.destination_city)} <small>— OM</small></h2><span>${esc(venue.name)}${venue.address?` · ${esc(venue.address)}`:''}</span></div><div class="team-bubbles">${names.map(n=>`<i title="${esc(n)}">${initials(n)}</i>`).join('')}</div></div><div class="next-trip-foot"><div><span>Préparation</span><strong>${next.completeness_score}%</strong><i><u style="width:${next.completeness_score}%"></u></i></div><button data-mission="${next.id}">Ouvrir le dossier →</button></div></article>`:'<article class="empty-card">Aucun déplacement à venir pour l’équipe.</article>'}
+  ${next?`<article class="next-trip"><div class="next-trip-city">${visualImage({url:visuals.cityPhotoUrl,title:visuals.cityTitle,alt:`Vue de ${next.destination_city}`,kind:'city-photo'})}</div><div class="next-trip-head"><span>${esc(match.competition||'PROCHAIN DÉPLACEMENT')} · ${assigned?'VOUS PARTEZ':'INFORMATION ÉQUIPE'}</span><b>${date&&daysUntil(date)>=0?`J-${daysUntil(date)}`:'À venir'}</b></div><div class="next-trip-body"><div><p>${fmtDate(date)}</p><h2>${esc(match.home_team||next.destination_city)} <small>— OM</small></h2><span>${esc(venue.name)}${venue.address?` · ${esc(venue.address)}`:''}</span></div><div class="next-club-badge">${visualImage({url:visuals.clubLogoUrl,title:visuals.clubTitle,alt:`Logo ${visuals.clubName}`,kind:'club-logo'})}</div><div class="team-bubbles">${names.map(n=>`<i title="${esc(n)}">${initials(n)}</i>`).join('')}</div></div><div class="next-trip-foot"><div><span>Préparation</span><strong>${next.completeness_score}%</strong><i><u style="width:${next.completeness_score}%"></u></i></div><button data-mission="${next.id}">Ouvrir le dossier →</button></div></article>`:'<article class="empty-card">Aucun déplacement à venir pour l’équipe.</article>'}
   ${next?`<div class="boarding-grid">
     <section class="dashboard-panel span-2"><div class="panel-head"><div><p class="eyebrow">DERNIÈRE INFORMATION TRAVEL</p><h3>Léo Tagawa & Stéphane Saliu</h3></div><span class="live-dot">● Synchronisé</span></div>${travelUpdateCard(latest)}</section>
-    <section class="dashboard-panel place-panel"><div class="panel-head"><div><p class="eyebrow">HÔTEL</p><h3>${esc(next.destination_city||'Déplacement')}</h3></div><span class="panel-icon">⌂</span></div><strong class="key-value">${esc(hotel.name)}</strong>${addressHtml(hotel)}</section>
+    <section class="dashboard-panel place-panel hotel-panel">${placeVisual('hotel',hotel,'Hôtel confirmé')}<div class="panel-head"><div><p class="eyebrow">HÔTEL</p><h3>${esc(next.destination_city||'Déplacement')}</h3></div><span class="panel-icon">⌂</span></div><strong class="key-value">${esc(hotel.name)}</strong>${addressHtml(hotel)}</section>
     <section class="dashboard-panel place-panel"><div class="panel-head"><div><p class="eyebrow">STADE</p><h3>${esc(next.destination_city||'Déplacement')}</h3></div><span class="panel-icon">⌖</span></div><strong class="key-value">${esc(venue.name)}</strong>${addressHtml(venue)}</section>
     <section id="homeWeatherCard" class="dashboard-panel weather-panel"><div class="panel-head"><div><p class="eyebrow">MÉTÉO</p><h3>${esc(next.destination_city||'Destination')}</h3></div><span class="panel-icon">☀</span></div><strong class="key-value">Chargement…</strong></section>
     <section class="dashboard-panel"><div class="panel-head"><div><p class="eyebrow">TRANSPORT</p><h3>Départ</h3></div><span class="panel-icon">✈</span></div><strong class="key-value">${outbound?fmtDateTime(outbound.scheduled_departure):journey.departure?fmtDateTime(journey.departure):'Horaire attendu'}</strong><small class="key-detail">${esc(journey.outbound||'Synchronisation du mail Travel active')}</small>${roadmap?`<button class="panel-open" type="button" data-document="${roadmap.id}">Lire toute la feuille de route →</button>`:''}</section>
@@ -247,7 +300,7 @@ function tripListHtml(filter){
   const rows=state.missions.filter(m=>{const n=assignmentNames(m.id);if(filter==='unassigned')return !n.length;if(filter&&filter!=='all')return n.includes(filter);return true}).sort((a,b)=>new Date(dateOf(a)||'2999')-new Date(dateOf(b)||'2999'))
   return rows.length?rows.map(tripCard).join(''):'<div class="empty-card">Aucun déplacement dans ce filtre.</div>'
 }
-function renderTripList(filter){$('tripList').innerHTML=tripListHtml(filter);bindPage()}
+function renderTripList(filter){$('tripList').innerHTML=tripListHtml(filter);bindPage();hydrateVisuals($('tripList'))}
 function documentsPage(){
   const docs=visibleDocuments(),quotes=docs.filter(doc=>doc.document_type==='caterer_quote'&&doc.metadata?.is_current!==false&&doc.metadata?.document_status!=='request'),requests=docs.filter(doc=>doc.document_type==='caterer_quote'&&doc.metadata?.document_status==='request'),travelDocs=docs.filter(doc=>doc.document_type!=='caterer_quote'),mails=state.inbox.filter(x=>x.matched_mission_id)
   return `<div class="page-tools"><p>${docs.length} document${docs.length!==1?'s':''} accessible${docs.length!==1?'s':''} avec votre profil.</p></div>
@@ -317,14 +370,15 @@ function inboxPage(){
 }
 function openMission(id){
   const mission=missionOf(id);if(!mission)return
-  const match=matchOf(mission),names=assignmentNames(id),legs=state.legs.filter(x=>x.mission_id===id),docs=state.documents.filter(x=>x.mission_id===id),quotes=currentQuotes(id),otherDocs=docs.filter(x=>x.document_type!=='caterer_quote'),date=dateOf(mission),venue=venueDetails(mission),hotel=hotelDetails(mission)
-  $('tripDialogContent').innerHTML=`<button class="dialog-close" onclick="document.getElementById('tripDialog').close()">×</button><div class="dialog-hero"><p>${esc(match.competition||'DÉPLACEMENT')} · ${esc(match.round_label||'')}</p><h2>${esc(match.home_team||mission.destination_city)} <small>— OM</small></h2><span>${fmtDate(date)} · ${esc(venue.name)}</span></div><div class="dialog-content">
+  const match=matchOf(mission),names=assignmentNames(id),legs=state.legs.filter(x=>x.mission_id===id),docs=state.documents.filter(x=>x.mission_id===id),quotes=currentQuotes(id),otherDocs=docs.filter(x=>x.document_type!=='caterer_quote'),date=dateOf(mission),venue=venueDetails(mission),hotel=hotelDetails(mission),visuals=missionVisuals(mission)
+  $('tripDialogContent').innerHTML=`<button class="dialog-close" onclick="document.getElementById('tripDialog').close()">×</button><div class="dialog-hero"><div class="dialog-city-photo">${visualImage({url:visuals.cityPhotoUrl,title:visuals.cityTitle,alt:`Vue de ${mission.destination_city}`,kind:'city-photo'})}</div><div class="dialog-hero-copy"><p>${esc(match.competition||'DÉPLACEMENT')} · ${esc(match.round_label||'')}</p><h2>${esc(match.home_team||mission.destination_city)} <small>— OM</small></h2><span>${fmtDate(date)} · ${esc(venue.name)}</span></div><div class="dialog-club-badge">${visualImage({url:visuals.clubLogoUrl,title:visuals.clubTitle,alt:`Logo ${visuals.clubName}`,kind:'club-logo'})}</div></div><div class="dialog-content">
+  ${hotel.photoUrl||hotel.wikipediaTitle?`<section class="destination-gallery"><article>${visualImage({url:visuals.cityPhotoUrl,title:visuals.cityTitle,alt:`Vue de ${mission.destination_city}`,kind:'city-photo'})}<span>${esc(mission.destination_city)}</span></article><article>${visualImage({url:hotel.photoUrl,title:hotel.wikipediaTitle,alt:`Hôtel ${hotel.name}`,kind:'hotel-photo'})}<span>${esc(hotel.name)}</span></article></section>`:''}
   <section><p class="eyebrow">ÉQUIPE API</p><div class="dialog-team">${names.length?names.map(n=>{const p=TEAM.find(x=>x.name===n);return `<div><i style="background:${p?.color||'#168ac5'}">${initials(n)}</i><span><strong>${esc(n)}</strong><small>${esc(p?.role||'Équipe déplacement')}</small></span></div>`}).join(''):'<div class="empty-inline">Binôme à définir</div>'}</div></section>
   <section><p class="eyebrow">INFORMATIONS DE VOYAGE</p><div class="info-grid"><article><span>✈</span><small>Départ</small><strong>${legs.find(x=>x.direction==='outbound')?fmtDateTime(legs.find(x=>x.direction==='outbound').scheduled_departure):'Feuille de route attendue'}</strong></article><article class="place-card"><span>⌂</span><small>Hôtel</small><strong>${esc(hotel.name)}</strong>${addressHtml(hotel)}</article><article class="place-card"><span>⌖</span><small>Stade</small><strong>${esc(venue.name)}</strong>${addressHtml(venue)}</article><article id="weatherCard"><span>☀</span><small>Météo</small><strong>Chargement…</strong></article></div></section>
   <section><div class="section-title"><div><p class="eyebrow">RESTAURATION</p><h3>Fiches prestataires</h3></div></div><div class="supplier-grid">${quotes.length?quotes.map(supplierCard).join(''):'<div class="empty-inline">Aucune offre reçue.</div>'}</div></section>
   <section><div class="section-title"><div><p class="eyebrow">DOCUMENTS</p><h3>Dossier du déplacement</h3></div></div><div class="document-list compact-docs">${otherDocs.length?otherDocs.map(documentCard).join(''):'<div class="empty-inline">Feuille de route, billets et hôtel seront ajoutés automatiquement à leur réception.</div>'}</div></section>
   <section><p class="eyebrow">APPLICATIONS</p>${appCards(true)}</section></div>`
-  $('tripDialog').showModal();$('tripDialogContent').querySelectorAll('[data-offer]').forEach(btn=>btn.onclick=()=>openOffer(btn.dataset.offer));$('tripDialogContent').querySelectorAll('[data-document]').forEach(btn=>btn.onclick=()=>openDocument(btn.dataset.document));loadWeather(mission,date,'weatherCard')
+  $('tripDialog').showModal();$('tripDialogContent').querySelectorAll('[data-offer]').forEach(btn=>btn.onclick=()=>openOffer(btn.dataset.offer));$('tripDialogContent').querySelectorAll('[data-document]').forEach(btn=>btn.onclick=()=>openDocument(btn.dataset.document));hydrateVisuals($('tripDialogContent'));loadWeather(mission,date,'weatherCard')
 }
 function offerHistory(doc){return state.documents.filter(x=>x.document_type==='caterer_quote'&&x.mission_id===doc.mission_id&&x.metadata?.document_status!=='request'&&supplierKey(x)===supplierKey(doc)).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))}
 function contactLink(value,type){if(!value)return '';const href=type==='mail'?`mailto:${value}`:`tel:${String(value).replace(/[^+\d]/g,'')}`;return `<a href="${esc(href)}">${esc(value)}</a>`}
@@ -374,7 +428,7 @@ async function refreshDashboard(){
   if(!state.current||document.hidden)return
   await loadData(false)
   if(state.page==='home'){
-    $('pageContent').innerHTML=homePage();bindPage()
+    $('pageContent').innerHTML=homePage();bindPage();hydrateVisuals($('pageContent'))
     const mission=nextTeamMission();if(mission)loadWeather(mission,dateOf(mission),'homeWeatherCard')
   }
 }
