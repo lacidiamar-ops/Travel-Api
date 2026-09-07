@@ -163,7 +163,7 @@ function go(page){
   if(page==='inbox'&&!state.current.manager)page='home';state.page=page
   document.querySelectorAll('[data-page]').forEach(b=>b.classList.toggle('active',b.dataset.page===page))
   const meta={home:['ESPACE PERSONNEL','Accueil'],trips:['SAISON 2026-2027','Déplacements'],documents:['DOSSIER DE VOYAGE','Documents'],apps:['ACCÈS RAPIDES','Applications'],inbox:['SYNCHRONISATION MAIL','Travel Inbox']}
-  $('pageEyebrow').textContent=meta[page][0];$('pageTitle').textContent=meta[page][1]
+  const eyebrow=$('pageEyebrow'),title=$('pageTitle');if(eyebrow)eyebrow.textContent=meta[page][0];if(title)title.textContent=meta[page][1]
   const pages={home:homePage,trips:tripsPage,documents:documentsPage,apps:appsPage,inbox:inboxPage}
   $('pageContent').innerHTML=pages[page]();bindPage();hydrateVisuals($('pageContent'));window.scrollTo({top:0,behavior:'smooth'})
   if(page==='home'){const mission=nextTeamMission();if(mission)loadWeather(mission,dateOf(mission),'homeWeatherCard')}
@@ -284,7 +284,7 @@ function homePage(){
     <section class="dashboard-panel span-2"><div class="panel-head"><div><p class="eyebrow">DERNIÈRE INFORMATION TRAVEL</p><h3>Léo Tagawa & Stéphane Saliu</h3></div><span class="live-dot">● Synchronisé</span></div>${travelUpdateCard(latest)}</section>
     <section class="dashboard-panel place-panel hotel-panel">${placeVisual('hotel',hotel,'Hôtel confirmé')}<div class="panel-head"><div><p class="eyebrow">HÔTEL</p><h3>${esc(next.destination_city||'Déplacement')}</h3></div><span class="panel-icon">⌂</span></div><strong class="key-value">${esc(hotel.name)}</strong>${addressHtml(hotel)}</section>
     <section class="dashboard-panel place-panel"><div class="panel-head"><div><p class="eyebrow">STADE</p><h3>${esc(next.destination_city||'Déplacement')}</h3></div><span class="panel-icon">⌖</span></div><strong class="key-value">${esc(venue.name)}</strong>${addressHtml(venue)}</section>
-    <section id="homeWeatherCard" class="dashboard-panel weather-panel"><div class="panel-head"><div><p class="eyebrow">MÉTÉO</p><h3>${esc(next.destination_city||'Destination')}</h3></div><span class="panel-icon">☀</span></div><strong class="key-value">Chargement…</strong></section>
+    <section id="homeWeatherCard" class="dashboard-panel weather-panel"><div class="weather-visual"><img class="weather-animated-icon" src="https://cdn.meteocons.com/1.0.0/svg/fill/partly-cloudy-day.svg" alt="Météo animée" width="92" height="92"></div><div class="weather-copy"><p class="eyebrow">MÉTÉO</p><h3>${esc(next.destination_city||'Destination')}</h3><strong class="weather-condition">Chargement…</strong><small class="weather-detail">Prévision du déplacement</small></div></section>
     <section class="dashboard-panel"><div class="panel-head"><div><p class="eyebrow">TRANSPORT</p><h3>Départ</h3></div><span class="panel-icon">✈</span></div><strong class="key-value">${outbound?fmtDateTime(outbound.scheduled_departure):journey.departure?fmtDateTime(journey.departure):'Horaire attendu'}</strong><small class="key-detail">${esc(journey.outbound||'Synchronisation du mail Travel active')}</small>${roadmap?`<button class="panel-open" type="button" data-document="${roadmap.id}">Lire toute la feuille de route →</button>`:''}</section>
     <section class="dashboard-panel span-2"><div class="panel-head"><div><p class="eyebrow">RESTAURATION EXTÉRIEURE</p><h3>Fiches prestataires</h3></div><button class="text-btn" data-page="documents">Toutes les fiches</button></div>${quoteList(quotes)}</section>
   </div>`:''}
@@ -407,24 +407,39 @@ async function loadWeather(mission,date,cardId='weatherCard'){
   const search=`https://www.google.com/search?q=${encodeURIComponent(`météo ${city}`)}`
   const delta=date?Math.floor((new Date(date)-Date.now())/86400000):99
   if(delta>15||delta<-2){
-    if(card.classList.contains('dashboard-panel'))card.innerHTML=`<div class="panel-head"><div><p class="eyebrow">MÉTÉO</p><h3>${esc(city)}</h3></div><span class="panel-icon">☀</span></div><strong class="key-value">Disponible à J-15</strong><a class="weather-link" href="${search}" target="_blank" rel="noopener">Voir la météo ↗</a>`
-    else card.innerHTML=`<span>☀</span><small>Météo</small><strong>Prévision disponible à J-15</strong><a href="${search}" target="_blank" rel="noopener">Voir la météo ↗</a>`
+    if(card.classList.contains('dashboard-panel'))card.innerHTML=weatherWidget(city,'Prévisions détaillées à J-15','Les données s’actualiseront automatiquement','partly-cloudy-day',search)
+    else card.innerHTML=weatherDetailWidget('Prévisions détaillées à J-15','partly-cloudy-day',search)
     return
   }
   try{
     const geo=await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=fr&format=json`).then(r=>r.json());const loc=geo.results?.[0];if(!loc)throw new Error()
     const day=new Date(date||Date.now()).toISOString().slice(0,10)
-    const data=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${loc.latitude}&longitude=${loc.longitude}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=Europe%2FParis&start_date=${day}&end_date=${day}`).then(r=>r.json())
-    const max=data.daily?.temperature_2m_max?.[0],min=data.daily?.temperature_2m_min?.[0],rain=data.daily?.precipitation_probability_max?.[0]
+    const data=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${loc.latitude}&longitude=${loc.longitude}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code,wind_speed_10m_max&timezone=Europe%2FParis&start_date=${day}&end_date=${day}`).then(r=>r.json())
+    const max=data.daily?.temperature_2m_max?.[0],min=data.daily?.temperature_2m_min?.[0],rain=data.daily?.precipitation_probability_max?.[0],wind=data.daily?.wind_speed_10m_max?.[0],code=data.daily?.weather_code?.[0]
     if(max==null||min==null)throw new Error()
-    const content=`${Math.round(min)}° / ${Math.round(max)}° · pluie ${rain??0}%`
-    if(card.classList.contains('dashboard-panel'))card.innerHTML=`<div class="panel-head"><div><p class="eyebrow">MÉTÉO PRÉVUE</p><h3>${esc(city)}</h3></div><span class="panel-icon">☀</span></div><strong class="key-value">${content}</strong><a class="weather-link" href="${search}" target="_blank" rel="noopener">Détail ↗</a>`
-    else card.innerHTML=`<span>☀</span><small>Météo prévue</small><strong>${content}</strong><a href="${search}" target="_blank" rel="noopener">Détail ↗</a>`
+    const weather=weatherAppearance(code),content=`${Math.round(min)}° / ${Math.round(max)}° · pluie ${rain??0}%${wind!=null?` · vent ${Math.round(wind)} km/h`:''}`
+    if(card.classList.contains('dashboard-panel'))card.innerHTML=weatherWidget(city,weather.label,content,weather.icon,search)
+    else card.innerHTML=weatherDetailWidget(`${weather.label} · ${content}`,weather.icon,search)
   }catch{
-    if(card.classList.contains('dashboard-panel'))card.innerHTML=`<div class="panel-head"><div><p class="eyebrow">MÉTÉO</p><h3>${esc(city)}</h3></div><span class="panel-icon">☀</span></div><strong class="key-value">Prévision indisponible</strong><a class="weather-link" href="${search}" target="_blank" rel="noopener">Voir la météo ↗</a>`
-    else card.innerHTML=`<span>☀</span><small>Météo</small><strong>Prévision indisponible</strong><a href="${search}" target="_blank" rel="noopener">Voir la météo ↗</a>`
+    if(card.classList.contains('dashboard-panel'))card.innerHTML=weatherWidget(city,'Prévision momentanément indisponible','Réessayer dans quelques instants','overcast',search)
+    else card.innerHTML=weatherDetailWidget('Prévision momentanément indisponible','overcast',search)
   }
 }
+function weatherAppearance(code){
+  if(code===0)return{label:'Ciel dégagé',icon:'clear-day'}
+  if([1,2].includes(code))return{label:'Éclaircies',icon:'partly-cloudy-day'}
+  if(code===3)return{label:'Couvert',icon:'overcast'}
+  if([45,48].includes(code))return{label:'Brouillard',icon:'fog'}
+  if([51,53,55].includes(code))return{label:'Bruine',icon:'drizzle'}
+  if([56,57,66,67].includes(code))return{label:'Précipitations verglaçantes',icon:'sleet'}
+  if([61,63,65,80,81,82].includes(code))return{label:'Pluie',icon:'rain'}
+  if([71,73,75,77,85,86].includes(code))return{label:'Neige',icon:'snow'}
+  if([95,96,99].includes(code))return{label:'Orages',icon:'thunderstorms'}
+  return{label:'Météo variable',icon:'partly-cloudy-day'}
+}
+function weatherIcon(icon){return `https://cdn.meteocons.com/1.0.0/svg/fill/${icon}.svg`}
+function weatherWidget(city,condition,detail,icon,search){return `<div class="weather-visual"><img class="weather-animated-icon" src="${weatherIcon(icon)}" alt="${esc(condition)}" width="92" height="92"></div><div class="weather-copy"><p class="eyebrow">MÉTÉO DU DÉPLACEMENT</p><h3>${esc(city)}</h3><strong class="weather-condition">${esc(condition)}</strong><small class="weather-detail">${esc(detail)}</small><a class="weather-link" href="${search}" target="_blank" rel="noopener">Prévision détaillée ↗</a></div>`}
+function weatherDetailWidget(content,icon,search){return `<img class="info-weather-icon" src="${weatherIcon(icon)}" alt="" width="54" height="54"><small>Météo prévue</small><strong>${esc(content)}</strong><a href="${search}" target="_blank" rel="noopener">Prévision détaillée ↗</a>`}
 async function refreshDashboard(){
   if(!state.current||document.hidden)return
   await loadData(false)
